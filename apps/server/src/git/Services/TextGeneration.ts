@@ -12,6 +12,9 @@ import type { ChatAttachment } from "@t3tools/contracts";
 
 import type { TextGenerationError } from "../Errors.ts";
 
+/** Providers that support git text generation (commit messages, PR content, branch names). */
+export type TextGenerationProvider = "codex" | "claudeAgent";
+
 export interface CommitMessageGenerationInput {
   cwd: string;
   branch: string | null;
@@ -19,8 +22,10 @@ export interface CommitMessageGenerationInput {
   stagedPatch: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
-  /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
+  /** Model to use for generation. Defaults to the provider's default if not specified. */
   model?: string;
+  /** Provider to use for generation. Defaults to "codex" if not specified. */
+  provider?: TextGenerationProvider;
 }
 
 export interface CommitMessageGenerationResult {
@@ -37,8 +42,10 @@ export interface PrContentGenerationInput {
   commitSummary: string;
   diffSummary: string;
   diffPatch: string;
-  /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
+  /** Model to use for generation. Defaults to the provider's default if not specified. */
   model?: string;
+  /** Provider to use for generation. Defaults to "codex" if not specified. */
+  provider?: TextGenerationProvider;
 }
 
 export interface PrContentGenerationResult {
@@ -50,8 +57,10 @@ export interface BranchNameGenerationInput {
   cwd: string;
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
-  /** Model to use for generation. Defaults to gpt-5.4-mini if not specified. */
+  /** Model to use for generation. Defaults to the provider's default if not specified. */
   model?: string;
+  /** Provider to use for generation. Defaults to "codex" if not specified. */
+  provider?: TextGenerationProvider;
 }
 
 export interface BranchNameGenerationResult {
