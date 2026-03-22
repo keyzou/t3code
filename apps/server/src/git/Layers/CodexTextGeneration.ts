@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL } from "@t3tools/contracts";
+import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -17,6 +17,7 @@ import {
   type TextGenerationShape,
   TextGeneration,
 } from "../Services/TextGeneration.ts";
+import { limitSection, sanitizeCommitSubject, sanitizePrTitle } from "./textGenerationUtils.ts";
 
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
@@ -68,32 +69,6 @@ function normalizeCodexError(
   });
 }
 
-function limitSection(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  const truncated = value.slice(0, maxChars);
-  return `${truncated}\n\n[truncated]`;
-}
-
-function sanitizeCommitSubject(raw: string): string {
-  const singleLine = raw.trim().split(/\r?\n/g)[0]?.trim() ?? "";
-  const withoutTrailingPeriod = singleLine.replace(/[.]+$/g, "").trim();
-  if (withoutTrailingPeriod.length === 0) {
-    return "Update project files";
-  }
-
-  if (withoutTrailingPeriod.length <= 72) {
-    return withoutTrailingPeriod;
-  }
-  return withoutTrailingPeriod.slice(0, 72).trimEnd();
-}
-
-function sanitizePrTitle(raw: string): string {
-  const singleLine = raw.trim().split(/\r?\n/g)[0]?.trim() ?? "";
-  if (singleLine.length > 0) {
-    return singleLine;
-  }
-  return "Update project changes";
-}
 
 const makeCodexTextGeneration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -214,7 +189,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             "-s",
             "read-only",
             "--model",
-            model ?? DEFAULT_GIT_TEXT_GENERATION_MODEL,
+            model ?? DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
             "--config",
             `model_reasoning_effort="${CODEX_REASONING_EFFORT}"`,
             "--output-schema",
