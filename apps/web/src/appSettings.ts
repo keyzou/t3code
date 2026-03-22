@@ -55,6 +55,9 @@ export const AppSettingsSchema = Schema.Struct({
   timestampFormat: TimestampFormat.pipe(withDefaults(() => DEFAULT_TIMESTAMP_FORMAT)),
   customCodexModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
   customClaudeModels: Schema.Array(Schema.String).pipe(withDefaults(() => [])),
+  textGenerationProvider: Schema.Literals(["codex", "claudeAgent"]).pipe(
+    withDefaults(() => "codex" as const),
+  ),
   textGenerationModel: Schema.optional(TrimmedNonEmptyString),
 });
 export type AppSettings = typeof AppSettingsSchema.Type;

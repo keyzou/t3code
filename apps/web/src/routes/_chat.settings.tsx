@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { type ProviderKind, DEFAULT_GIT_TEXT_GENERATION_MODEL } from "@t3tools/contracts";
+import {
+  type ProviderKind,
+  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+} from "@t3tools/contracts";
 import { getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
 import {
   getAppModelOptions,
@@ -75,15 +78,17 @@ function SettingsRouteView() {
   const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
   const availableEditors = serverConfigQuery.data?.availableEditors;
 
+  const textGenProvider = settings.textGenerationProvider;
+  const textGenDefaultModel = DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[textGenProvider];
   const gitTextGenerationModelOptions = getAppModelOptions(
-    "codex",
-    settings.customCodexModels,
+    textGenProvider,
+    textGenProvider === "codex" ? settings.customCodexModels : settings.customClaudeModels,
     settings.textGenerationModel,
   );
   const selectedGitTextGenerationModelLabel =
     gitTextGenerationModelOptions.find(
       (option) =>
-        option.slug === (settings.textGenerationModel ?? DEFAULT_GIT_TEXT_GENERATION_MODEL),
+        option.slug === (settings.textGenerationModel ?? textGenDefaultModel),
     )?.name ?? settings.textGenerationModel;
 
   const openKeybindingsFile = useCallback(() => {
@@ -480,51 +485,91 @@ function SettingsRouteView() {
               <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Git</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Configure the model used for generating commit messages, PR titles, and branch
-                  names.
+                  Configure the provider and model used for generating commit messages, PR titles,
+                  and branch names.
                 </p>
               </div>
 
-              <div className="flex flex-col gap-4 rounded-lg border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">Text generation model</p>
-                  <p className="text-xs text-muted-foreground">
-                    Model used for auto-generated git content.
-                  </p>
-                </div>
-                <Select
-                  value={settings.textGenerationModel ?? DEFAULT_GIT_TEXT_GENERATION_MODEL}
-                  onValueChange={(value) => {
-                    if (value) {
-                      updateSettings({
-                        textGenerationModel: value,
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger
-                    className="w-full shrink-0 sm:w-48"
-                    aria-label="Git text generation model"
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 rounded-lg border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">
+                      Text generation provider
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Which AI provider to use for auto-generated git content.
+                    </p>
+                  </div>
+                  <Select
+                    value={textGenProvider}
+                    onValueChange={(value) => {
+                      if (value === "codex" || value === "claudeAgent") {
+                        updateSettings({
+                          textGenerationProvider: value,
+                          textGenerationModel:
+                            DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[value],
+                        });
+                      }
+                    }}
                   >
-                    <SelectValue>{selectedGitTextGenerationModelLabel}</SelectValue>
-                  </SelectTrigger>
-                  <SelectPopup align="end">
-                    {gitTextGenerationModelOptions.map((option) => (
-                      <SelectItem key={option.slug} value={option.slug}>
-                        {option.name}
-                      </SelectItem>
-                    ))}
-                  </SelectPopup>
-                </Select>
+                    <SelectTrigger
+                      className="w-full shrink-0 sm:w-48"
+                      aria-label="Git text generation provider"
+                    >
+                      <SelectValue>
+                        {textGenProvider === "claudeAgent" ? "Claude" : "Codex"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup align="end">
+                      <SelectItem value="codex">Codex</SelectItem>
+                      <SelectItem value="claudeAgent">Claude</SelectItem>
+                    </SelectPopup>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-4 rounded-lg border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">Text generation model</p>
+                    <p className="text-xs text-muted-foreground">
+                      Model used for auto-generated git content.
+                    </p>
+                  </div>
+                  <Select
+                    value={settings.textGenerationModel ?? textGenDefaultModel}
+                    onValueChange={(value) => {
+                      if (value) {
+                        updateSettings({
+                          textGenerationModel: value,
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      className="w-full shrink-0 sm:w-48"
+                      aria-label="Git text generation model"
+                    >
+                      <SelectValue>{selectedGitTextGenerationModelLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup align="end">
+                      {gitTextGenerationModelOptions.map((option) => (
+                        <SelectItem key={option.slug} value={option.slug}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                </div>
               </div>
 
-              {settings.textGenerationModel !== defaults.textGenerationModel ? (
+              {(settings.textGenerationModel !== defaults.textGenerationModel ||
+                settings.textGenerationProvider !== defaults.textGenerationProvider) ? (
                 <div className="mt-3 flex justify-end">
                   <Button
                     size="xs"
                     variant="outline"
                     onClick={() =>
                       updateSettings({
+                        textGenerationProvider: defaults.textGenerationProvider,
                         textGenerationModel: defaults.textGenerationModel,
                       })
                     }
