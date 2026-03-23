@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon, PlusIcon, RotateCcwIcon, Undo2Icon, XIcon } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import {
+  type ModelSlug,
   type ProviderKind,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
 } from "@t3tools/contracts";
 import { getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
 import {
-  getAppModelOptions,
+  getCustomModelOptionsByProvider,
   getCustomModelsForProvider,
   MAX_CUSTOM_MODEL_LENGTH,
   MODEL_PROVIDER_SETTINGS,
@@ -28,6 +29,7 @@ import {
 } from "../components/ui/select";
 import { SidebarTrigger } from "../components/ui/sidebar";
 import { Switch } from "../components/ui/switch";
+import { ProviderModelPicker } from "../components/chat/ProviderModelPicker";
 import { SidebarInset } from "../components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
@@ -219,20 +221,8 @@ function SettingsRouteView() {
 
   const textGenProvider = settings.textGenerationProvider;
   const textGenDefaultModel = DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[textGenProvider];
-  const gitTextGenerationModelOptions = getAppModelOptions(
-    textGenProvider,
-    textGenProvider === "codex" ? settings.customCodexModels : settings.customClaudeModels,
-    settings.textGenerationModel,
-  );
-  const currentGitTextGenerationModel =
-    settings.textGenerationModel ?? textGenDefaultModel;
-  const defaultGitTextGenerationModel =
-    defaults.textGenerationModel ?? textGenDefaultModel;
-  const isGitTextGenerationModelDirty =
-    currentGitTextGenerationModel !== defaultGitTextGenerationModel;
-  const selectedGitTextGenerationModelLabel =
-    gitTextGenerationModelOptions.find((option) => option.slug === currentGitTextGenerationModel)
-      ?.name ?? currentGitTextGenerationModel;
+  const textGenModel = (settings.textGenerationModel ?? textGenDefaultModel) as ModelSlug;
+  const gitModelOptionsByProvider = getCustomModelOptionsByProvider(settings);
   const selectedCustomModelProviderSettings = MODEL_PROVIDER_SETTINGS.find(
     (providerSettings) => providerSettings.provider === selectedCustomModelProvider,
   )!;
@@ -268,7 +258,9 @@ function SettingsRouteView() {
     ...(settings.textGenerationProvider !== defaults.textGenerationProvider
       ? ["Git writing provider"]
       : []),
-    ...(isGitTextGenerationModelDirty ? ["Git writing model"] : []),
+    ...(settings.textGenerationModel !== defaults.textGenerationModel
+      ? ["Git writing model"]
+      : []),
     ...(settings.customCodexModels.length > 0 || settings.customClaudeModels.length > 0
       ? ["Custom models"]
       : []),
@@ -638,80 +630,21 @@ function SettingsRouteView() {
 
             <SettingsSection title="Models">
               <SettingsRow
-                title="Git writing provider"
-                description="Which AI provider to use for auto-generated git content."
-                control={
-                  <Select
-                    value={textGenProvider}
-                    onValueChange={(value) => {
-                      if (value === "codex" || value === "claudeAgent") {
-                        updateSettings({
-                          textGenerationProvider: value,
-                          textGenerationModel:
-                            DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[value],
-                        });
-                      }
-                    }}
-                  >
-                    <SelectTrigger
-                      className="w-full sm:w-52"
-                      aria-label="Git text generation provider"
-                    >
-                      <SelectValue>
-                        {textGenProvider === "claudeAgent" ? "Claude" : "Codex"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectPopup align="end" alignItemWithTrigger={false}>
-                      <SelectItem hideIndicator value="codex">
-                        Codex
-                      </SelectItem>
-                      <SelectItem hideIndicator value="claudeAgent">
-                        Claude
-                      </SelectItem>
-                    </SelectPopup>
-                  </Select>
-                }
-              />
-
-              <SettingsRow
                 title="Git writing model"
-                description="Model used for auto-generated git content."
-                resetAction={
-                  isGitTextGenerationModelDirty ? (
-                    <SettingResetButton
-                      label="git writing model"
-                      onClick={() =>
-                        updateSettings({
-                          textGenerationModel: defaults.textGenerationModel,
-                        })
-                      }
-                    />
-                  ) : null
-                }
+                description="Provider and model used for auto-generated git content."
                 control={
-                  <Select
-                    value={currentGitTextGenerationModel}
-                    onValueChange={(value) => {
-                      if (!value) return;
+                  <ProviderModelPicker
+                    provider={textGenProvider}
+                    model={textGenModel}
+                    lockedProvider={null}
+                    modelOptionsByProvider={gitModelOptionsByProvider}
+                    onProviderModelChange={(provider, model) => {
                       updateSettings({
-                        textGenerationModel: value,
+                        textGenerationProvider: provider,
+                        textGenerationModel: model,
                       });
                     }}
-                  >
-                    <SelectTrigger
-                      className="w-full sm:w-52"
-                      aria-label="Git text generation model"
-                    >
-                      <SelectValue>{selectedGitTextGenerationModelLabel}</SelectValue>
-                    </SelectTrigger>
-                    <SelectPopup align="end" alignItemWithTrigger={false}>
-                      {gitTextGenerationModelOptions.map((option) => (
-                        <SelectItem hideIndicator key={option.slug} value={option.slug}>
-                          {option.name}
-                        </SelectItem>
-                      ))}
-                    </SelectPopup>
-                  </Select>
+                  />
                 }
               />
 
