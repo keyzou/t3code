@@ -49,8 +49,6 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
   } satisfies TextGenerationShape;
 });
 
-// Re-tag the concrete layers to the internal tags so they don't collide on
-// the public TextGeneration tag.
 const InternalCodexLayer = Layer.effect(
   CodexTextGen,
   Effect.gen(function* () {

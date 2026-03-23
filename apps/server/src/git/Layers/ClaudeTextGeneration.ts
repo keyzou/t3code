@@ -152,7 +152,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         return stdout;
       });
 
-      // Run with timeout, then parse the envelope.
       const rawStdout = yield* runClaudeCommand.pipe(
         Effect.scoped,
         Effect.timeoutOption(CLAUDE_TIMEOUT_MS),
@@ -167,7 +166,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         ),
       );
 
-      // Parse the wrapper envelope to extract `structured_output`.
       const envelope = yield* Schema.decodeEffect(Schema.fromJsonString(ClaudeOutputEnvelope))(
         rawStdout,
       ).pipe(
@@ -182,7 +180,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         ),
       );
 
-      // Validate the structured_output against the caller's schema.
       return yield* Schema.decodeEffect(outputSchemaJson)(envelope.structured_output).pipe(
         Effect.catchTag("SchemaError", (cause) =>
           Effect.fail(
