@@ -24,6 +24,7 @@ import {
 } from "../Services/TextGeneration.ts";
 import { limitSection, sanitizeCommitSubject, sanitizePrTitle } from "./textGenerationUtils.ts";
 
+const CLAUDE_REASONING_EFFORT = "low";
 const CLAUDE_TIMEOUT_MS = 180_000;
 
 /** Build a JSON-schema string suitable for the Claude CLI `--json-schema` flag. */
@@ -133,7 +134,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
             "--model",
             model ?? DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.claudeAgent,
             "--effort",
-            "low",
+            CLAUDE_REASONING_EFFORT,
             "--dangerously-skip-permissions",
           ],
           {
