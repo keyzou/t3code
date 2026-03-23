@@ -15,14 +15,18 @@ import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shar
 
 import { TextGenerationError } from "../Errors.ts";
 import {
-  type BranchNameGenerationInput,
   type BranchNameGenerationResult,
   type CommitMessageGenerationResult,
   type PrContentGenerationResult,
   type TextGenerationShape,
   TextGeneration,
 } from "../Services/TextGeneration.ts";
-import { limitSection, sanitizeCommitSubject, sanitizePrTitle } from "./textGenerationUtils.ts";
+import {
+  buildBranchNamePrompt,
+  buildCommitMessagePrompt,
+  buildPrContentPrompt,
+} from "./textGenerationPrompts.ts";
+import { normalizeCliError, sanitizeCommitSubject, sanitizePrTitle } from "./textGenerationUtils.ts";
 
 const CLAUDE_REASONING_EFFORT = "low";
 const CLAUDE_TIMEOUT_MS = 180_000;
@@ -35,42 +39,6 @@ function toClaudeJsonSchemaString(schema: Schema.Top): string {
       ? { ...document.schema, $defs: document.definitions }
       : document.schema;
   return JSON.stringify(schemaObj);
-}
-
-function normalizeClaudeError(
-  operation: string,
-  error: unknown,
-  fallback: string,
-): TextGenerationError {
-  if (Schema.is(TextGenerationError)(error)) {
-    return error;
-  }
-
-  if (error instanceof Error) {
-    const lower = error.message.toLowerCase();
-    if (
-      error.message.includes("Command not found: claude") ||
-      lower.includes("spawn claude") ||
-      lower.includes("enoent")
-    ) {
-      return new TextGenerationError({
-        operation,
-        detail: "Claude CLI (`claude`) is required but not available on PATH.",
-        cause: error,
-      });
-    }
-    return new TextGenerationError({
-      operation,
-      detail: `${fallback}: ${error.message}`,
-      cause: error,
-    });
-  }
-
-  return new TextGenerationError({
-    operation,
-    detail: fallback,
-    cause: error,
-  });
 }
 
 /**
@@ -96,7 +64,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         }),
       ).pipe(
         Effect.mapError((cause) =>
-          normalizeClaudeError(operation, cause, "Failed to collect process output"),
+          normalizeCliError("claude", operation, cause, "Failed to collect process output"),
         ),
       );
       return text;
@@ -150,7 +118,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
           .spawn(command)
           .pipe(
             Effect.mapError((cause) =>
-              normalizeClaudeError(operation, cause, "Failed to spawn Claude CLI process"),
+              normalizeCliError("claude", operation, cause, "Failed to spawn Claude CLI process"),
             ),
           );
 
@@ -161,7 +129,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
             child.exitCode.pipe(
               Effect.map((value) => Number(value)),
               Effect.mapError((cause) =>
-                normalizeClaudeError(operation, cause, "Failed to read Claude CLI exit code"),
+                normalizeCliError("claude", operation, cause, "Failed to read Claude CLI exit code"),
               ),
             ),
           ],
@@ -229,50 +197,22 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     });
 
   // ---------------------------------------------------------------------------
-  // TextGenerationShape methods — identical prompts to CodexTextGeneration
+  // TextGenerationShape methods
   // ---------------------------------------------------------------------------
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
-    const wantsBranch = input.includeBranch === true;
-
-    const prompt = [
-      "You write concise git commit messages.",
-      wantsBranch
-        ? "Return a JSON object with keys: subject, body, branch."
-        : "Return a JSON object with keys: subject, body.",
-      "Rules:",
-      "- subject must be imperative, <= 72 chars, and no trailing period",
-      "- body can be empty string or short bullet points",
-      ...(wantsBranch
-        ? ["- branch must be a short semantic git branch fragment for this change"]
-        : []),
-      "- capture the primary user-visible or developer-visible change",
-      "",
-      `Branch: ${input.branch ?? "(detached)"}`,
-      "",
-      "Staged files:",
-      limitSection(input.stagedSummary, 6_000),
-      "",
-      "Staged patch:",
-      limitSection(input.stagedPatch, 40_000),
-    ].join("\n");
-
-    const outputSchemaJson = wantsBranch
-      ? Schema.Struct({
-          subject: Schema.String,
-          body: Schema.String,
-          branch: Schema.String,
-        })
-      : Schema.Struct({
-          subject: Schema.String,
-          body: Schema.String,
-        });
+    const { prompt, outputSchema } = buildCommitMessagePrompt({
+      branch: input.branch,
+      stagedSummary: input.stagedSummary,
+      stagedPatch: input.stagedPatch,
+      includeBranch: input.includeBranch === true,
+    });
 
     return runClaudeJson({
       operation: "generateCommitMessage",
       cwd: input.cwd,
       prompt,
-      outputSchemaJson,
+      outputSchemaJson: outputSchema,
       ...(input.model ? { model: input.model } : {}),
     }).pipe(
       Effect.map(
@@ -289,36 +229,19 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
   };
 
   const generatePrContent: TextGenerationShape["generatePrContent"] = (input) => {
-    const prompt = [
-      "You write GitHub pull request content.",
-      "Return a JSON object with keys: title, body.",
-      "Rules:",
-      "- title should be concise and specific",
-      "- body must be markdown and include headings '## Summary' and '## Testing'",
-      "- under Summary, provide short bullet points",
-      "- under Testing, include bullet points with concrete checks or 'Not run' where appropriate",
-      "",
-      `Base branch: ${input.baseBranch}`,
-      `Head branch: ${input.headBranch}`,
-      "",
-      "Commits:",
-      limitSection(input.commitSummary, 12_000),
-      "",
-      "Diff stat:",
-      limitSection(input.diffSummary, 12_000),
-      "",
-      "Diff patch:",
-      limitSection(input.diffPatch, 40_000),
-    ].join("\n");
+    const { prompt, outputSchema } = buildPrContentPrompt({
+      baseBranch: input.baseBranch,
+      headBranch: input.headBranch,
+      commitSummary: input.commitSummary,
+      diffSummary: input.diffSummary,
+      diffPatch: input.diffPatch,
+    });
 
     return runClaudeJson({
       operation: "generatePrContent",
       cwd: input.cwd,
       prompt,
-      outputSchemaJson: Schema.Struct({
-        title: Schema.String,
-        body: Schema.String,
-      }),
+      outputSchemaJson: outputSchema,
       ...(input.model ? { model: input.model } : {}),
     }).pipe(
       Effect.map(
@@ -333,39 +256,16 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
 
   const generateBranchName: TextGenerationShape["generateBranchName"] = (input) => {
     return Effect.gen(function* () {
-      const attachmentLines = (input.attachments ?? []).map(
-        (attachment) =>
-          `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
-      );
-
-      const promptSections = [
-        "You generate concise git branch names.",
-        "Return a JSON object with key: branch.",
-        "Rules:",
-        "- Branch should describe the requested work from the user message.",
-        "- Keep it short and specific (2-6 words).",
-        "- Use plain words only, no issue prefixes and no punctuation-heavy text.",
-        "- If images are attached, use them as primary context for visual/UI issues.",
-        "",
-        "User message:",
-        limitSection(input.message, 8_000),
-      ];
-      if (attachmentLines.length > 0) {
-        promptSections.push(
-          "",
-          "Attachment metadata:",
-          limitSection(attachmentLines.join("\n"), 4_000),
-        );
-      }
-      const prompt = promptSections.join("\n");
+      const { prompt, outputSchema } = buildBranchNamePrompt({
+        message: input.message,
+        attachments: input.attachments,
+      });
 
       const generated = yield* runClaudeJson({
         operation: "generateBranchName",
         cwd: input.cwd,
         prompt,
-        outputSchemaJson: Schema.Struct({
-          branch: Schema.String,
-        }),
+        outputSchemaJson: outputSchema,
         ...(input.model ? { model: input.model } : {}),
       });
 
