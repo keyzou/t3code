@@ -121,8 +121,7 @@ export interface BranchNamePromptInput {
 
 export function buildBranchNamePrompt(input: BranchNamePromptInput) {
   const attachmentLines = (input.attachments ?? []).map(
-    (attachment) =>
-      `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
+    (attachment) => `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
   );
 
   const promptSections = [

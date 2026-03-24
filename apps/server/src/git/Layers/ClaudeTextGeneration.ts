@@ -26,7 +26,12 @@ import {
   buildCommitMessagePrompt,
   buildPrContentPrompt,
 } from "./textGenerationPrompts.ts";
-import { normalizeCliError, sanitizeCommitSubject, sanitizePrTitle, toJsonSchemaObject } from "./textGenerationUtils.ts";
+import {
+  normalizeCliError,
+  sanitizeCommitSubject,
+  sanitizePrTitle,
+  toJsonSchemaObject,
+} from "./textGenerationUtils.ts";
 
 const CLAUDE_REASONING_EFFORT = "low";
 const CLAUDE_TIMEOUT_MS = 180_000;
@@ -119,7 +124,12 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
             child.exitCode.pipe(
               Effect.map((value) => Number(value)),
               Effect.mapError((cause) =>
-                normalizeCliError("claude", operation, cause, "Failed to read Claude CLI exit code"),
+                normalizeCliError(
+                  "claude",
+                  operation,
+                  cause,
+                  "Failed to read Claude CLI exit code",
+                ),
               ),
             ),
           ],

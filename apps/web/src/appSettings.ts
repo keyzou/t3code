@@ -227,8 +227,16 @@ export function getCustomModelOptionsByProvider(
 ): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
   const customModelsByProvider = getCustomModelsByProvider(settings);
   return {
-    codex: getAppModelOptions("codex", customModelsByProvider.codex, selectedProvider === "codex" ? selectedModel : undefined),
-    claudeAgent: getAppModelOptions("claudeAgent", customModelsByProvider.claudeAgent, selectedProvider === "claudeAgent" ? selectedModel : undefined),
+    codex: getAppModelOptions(
+      "codex",
+      customModelsByProvider.codex,
+      selectedProvider === "codex" ? selectedModel : undefined,
+    ),
+    claudeAgent: getAppModelOptions(
+      "claudeAgent",
+      customModelsByProvider.claudeAgent,
+      selectedProvider === "claudeAgent" ? selectedModel : undefined,
+    ),
   };
 }
 

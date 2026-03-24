@@ -222,7 +222,11 @@ function SettingsRouteView() {
   const textGenProvider = settings.textGenerationProvider;
   const textGenDefaultModel = DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[textGenProvider];
   const textGenModel = (settings.textGenerationModel ?? textGenDefaultModel) as ModelSlug;
-  const gitModelOptionsByProvider = getCustomModelOptionsByProvider(settings, textGenProvider, textGenModel);
+  const gitModelOptionsByProvider = getCustomModelOptionsByProvider(
+    settings,
+    textGenProvider,
+    textGenModel,
+  );
   const selectedCustomModelProviderSettings = MODEL_PROVIDER_SETTINGS.find(
     (providerSettings) => providerSettings.provider === selectedCustomModelProvider,
   )!;
@@ -258,9 +262,7 @@ function SettingsRouteView() {
     ...(settings.textGenerationProvider !== defaults.textGenerationProvider
       ? ["Git writing provider"]
       : []),
-    ...(settings.textGenerationModel !== defaults.textGenerationModel
-      ? ["Git writing model"]
-      : []),
+    ...(settings.textGenerationModel !== defaults.textGenerationModel ? ["Git writing model"] : []),
     ...(settings.customCodexModels.length > 0 || settings.customClaudeModels.length > 0
       ? ["Custom models"]
       : []),

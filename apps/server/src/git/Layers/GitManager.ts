@@ -841,7 +841,12 @@ export const makeGitManager = Effect.gen(function* () {
       };
     });
 
-  const runPrStep = (cwd: string, fallbackBranch: string | null, model?: string, provider?: TextGenerationProvider) =>
+  const runPrStep = (
+    cwd: string,
+    fallbackBranch: string | null,
+    model?: string,
+    provider?: TextGenerationProvider,
+  ) =>
     Effect.gen(function* () {
       const details = yield* gitCore.statusDetails(cwd);
       const branch = details.branch ?? fallbackBranch;
@@ -1246,7 +1251,12 @@ export const makeGitManager = Effect.gen(function* () {
                 Effect.flatMap(() =>
                   Effect.gen(function* () {
                     currentPhase = "pr";
-                    return yield* runPrStep(input.cwd, currentBranch, input.textGenerationModel, input.textGenerationProvider);
+                    return yield* runPrStep(
+                      input.cwd,
+                      currentBranch,
+                      input.textGenerationModel,
+                      input.textGenerationProvider,
+                    );
                   }),
                 ),
               )

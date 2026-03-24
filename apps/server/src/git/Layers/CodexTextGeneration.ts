@@ -22,7 +22,12 @@ import {
   buildCommitMessagePrompt,
   buildPrContentPrompt,
 } from "./textGenerationPrompts.ts";
-import { normalizeCliError, sanitizeCommitSubject, sanitizePrTitle, toJsonSchemaObject } from "./textGenerationUtils.ts";
+import {
+  normalizeCliError,
+  sanitizeCommitSubject,
+  sanitizePrTitle,
+  toJsonSchemaObject,
+} from "./textGenerationUtils.ts";
 
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
