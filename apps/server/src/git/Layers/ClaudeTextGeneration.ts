@@ -26,20 +26,10 @@ import {
   buildCommitMessagePrompt,
   buildPrContentPrompt,
 } from "./textGenerationPrompts.ts";
-import { normalizeCliError, sanitizeCommitSubject, sanitizePrTitle } from "./textGenerationUtils.ts";
+import { normalizeCliError, sanitizeCommitSubject, sanitizePrTitle, toJsonSchemaObject } from "./textGenerationUtils.ts";
 
 const CLAUDE_REASONING_EFFORT = "low";
 const CLAUDE_TIMEOUT_MS = 180_000;
-
-/** Build a JSON-schema string suitable for the Claude CLI `--json-schema` flag. */
-function toClaudeJsonSchemaString(schema: Schema.Top): string {
-  const document = Schema.toJsonSchemaDocument(schema);
-  const schemaObj =
-    document.definitions && Object.keys(document.definitions).length > 0
-      ? { ...document.schema, $defs: document.definitions }
-      : document.schema;
-  return JSON.stringify(schemaObj);
-}
 
 /**
  * Schema for the wrapper JSON returned by `claude -p --output-format json`.
@@ -88,7 +78,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     model?: string;
   }): Effect.Effect<S["Type"], TextGenerationError, S["DecodingServices"]> =>
     Effect.gen(function* () {
-      const jsonSchemaStr = toClaudeJsonSchemaString(outputSchemaJson);
+      const jsonSchemaStr = JSON.stringify(toJsonSchemaObject(outputSchemaJson));
 
       const runClaudeCommand = Effect.gen(function* () {
         const command = ChildProcess.make(
