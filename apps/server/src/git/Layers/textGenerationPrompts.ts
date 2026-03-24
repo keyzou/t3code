@@ -22,12 +22,7 @@ export interface CommitMessagePromptInput {
   includeBranch: boolean;
 }
 
-export interface CommitMessagePromptResult {
-  prompt: string;
-  outputSchema: Schema.Struct.Type<any>;
-}
-
-export function buildCommitMessagePrompt(input: CommitMessagePromptInput): CommitMessagePromptResult {
+export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
   const wantsBranch = input.includeBranch;
 
   const prompt = [
@@ -52,18 +47,24 @@ export function buildCommitMessagePrompt(input: CommitMessagePromptInput): Commi
     limitSection(input.stagedPatch, 40_000),
   ].join("\n");
 
-  const outputSchema = wantsBranch
-    ? Schema.Struct({
+  if (wantsBranch) {
+    return {
+      prompt,
+      outputSchema: Schema.Struct({
         subject: Schema.String,
         body: Schema.String,
         branch: Schema.String,
-      })
-    : Schema.Struct({
-        subject: Schema.String,
-        body: Schema.String,
-      });
+      }),
+    };
+  }
 
-  return { prompt, outputSchema };
+  return {
+    prompt,
+    outputSchema: Schema.Struct({
+      subject: Schema.String,
+      body: Schema.String,
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -78,15 +79,7 @@ export interface PrContentPromptInput {
   diffPatch: string;
 }
 
-export interface PrContentPromptResult {
-  prompt: string;
-  outputSchema: Schema.Struct<{
-    title: typeof Schema.String;
-    body: typeof Schema.String;
-  }>;
-}
-
-export function buildPrContentPrompt(input: PrContentPromptInput): PrContentPromptResult {
+export function buildPrContentPrompt(input: PrContentPromptInput) {
   const prompt = [
     "You write GitHub pull request content.",
     "Return a JSON object with keys: title, body.",
@@ -126,14 +119,7 @@ export interface BranchNamePromptInput {
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
 }
 
-export interface BranchNamePromptResult {
-  prompt: string;
-  outputSchema: Schema.Struct<{
-    branch: typeof Schema.String;
-  }>;
-}
-
-export function buildBranchNamePrompt(input: BranchNamePromptInput): BranchNamePromptResult {
+export function buildBranchNamePrompt(input: BranchNamePromptInput) {
   const attachmentLines = (input.attachments ?? []).map(
     (attachment) =>
       `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
