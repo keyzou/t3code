@@ -222,11 +222,13 @@ export function resolveAppModelSelection(
 
 export function getCustomModelOptionsByProvider(
   settings: Pick<AppSettings, CustomModelSettingsKey>,
+  selectedProvider?: ProviderKind | null,
+  selectedModel?: string | null,
 ): Record<ProviderKind, ReadonlyArray<{ slug: string; name: string }>> {
   const customModelsByProvider = getCustomModelsByProvider(settings);
   return {
-    codex: getAppModelOptions("codex", customModelsByProvider.codex),
-    claudeAgent: getAppModelOptions("claudeAgent", customModelsByProvider.claudeAgent),
+    codex: getAppModelOptions("codex", customModelsByProvider.codex, selectedProvider === "codex" ? selectedModel : undefined),
+    claudeAgent: getAppModelOptions("claudeAgent", customModelsByProvider.claudeAgent, selectedProvider === "claudeAgent" ? selectedModel : undefined),
   };
 }
 

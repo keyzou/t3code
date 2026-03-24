@@ -623,8 +623,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const providerOptionsForDispatch = useMemo(() => getProviderStartOptions(settings), [settings]);
   const selectedModelForPicker = selectedModel;
   const modelOptionsByProvider = useMemo(
-    () => getCustomModelOptionsByProvider(settings),
-    [settings],
+    () => getCustomModelOptionsByProvider(settings, selectedProvider, selectedModel),
+    [settings, selectedProvider, selectedModel],
   );
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];

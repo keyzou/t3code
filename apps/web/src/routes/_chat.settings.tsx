@@ -222,7 +222,7 @@ function SettingsRouteView() {
   const textGenProvider = settings.textGenerationProvider;
   const textGenDefaultModel = DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[textGenProvider];
   const textGenModel = (settings.textGenerationModel ?? textGenDefaultModel) as ModelSlug;
-  const gitModelOptionsByProvider = getCustomModelOptionsByProvider(settings);
+  const gitModelOptionsByProvider = getCustomModelOptionsByProvider(settings, textGenProvider, textGenModel);
   const selectedCustomModelProviderSettings = MODEL_PROVIDER_SETTINGS.find(
     (providerSettings) => providerSettings.provider === selectedCustomModelProvider,
   )!;
@@ -632,6 +632,20 @@ function SettingsRouteView() {
               <SettingsRow
                 title="Git writing model"
                 description="Provider and model used for auto-generated git content."
+                resetAction={
+                  settings.textGenerationProvider !== defaults.textGenerationProvider ||
+                  settings.textGenerationModel !== defaults.textGenerationModel ? (
+                    <SettingResetButton
+                      label="git writing model"
+                      onClick={() => {
+                        updateSettings({
+                          textGenerationProvider: defaults.textGenerationProvider,
+                          textGenerationModel: defaults.textGenerationModel,
+                        });
+                      }}
+                    />
+                  ) : null
+                }
                 control={
                   <ProviderModelPicker
                     provider={textGenProvider}
