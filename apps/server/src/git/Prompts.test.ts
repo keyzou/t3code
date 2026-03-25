@@ -4,9 +4,9 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-} from "./textGenerationPrompts.ts";
-import { normalizeCliError } from "./textGenerationUtils.ts";
-import { TextGenerationError } from "../Errors.ts";
+} from "./Prompts.ts";
+import { normalizeCliError } from "./Utils.ts";
+import { TextGenerationError } from "./Errors.ts";
 
 describe("buildCommitMessagePrompt", () => {
   it("includes staged patch and summary in the prompt", () => {

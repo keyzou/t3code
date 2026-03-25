@@ -9,7 +9,7 @@
 import { Schema } from "effect";
 import type { ChatAttachment } from "@t3tools/contracts";
 
-import { limitSection } from "./textGenerationUtils.ts";
+import { limitSection } from "./Utils.ts";
 
 // ---------------------------------------------------------------------------
 // Commit message

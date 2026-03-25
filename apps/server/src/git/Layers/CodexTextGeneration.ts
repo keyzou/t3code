@@ -19,13 +19,13 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
-} from "./textGenerationPrompts.ts";
+} from "../Prompts.ts";
 import {
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
   toJsonSchemaObject,
-} from "./textGenerationUtils.ts";
+} from "../Utils.ts";
 
 const CODEX_TIMEOUT_MS = 180_000;
 
