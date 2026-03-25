@@ -11,6 +11,7 @@ import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { ClaudeModelSelection } from "@t3tools/contracts";
+import { normalizeClaudeModelOptions } from "@t3tools/shared/model";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { TextGenerationError } from "../Errors.ts";
@@ -27,7 +28,6 @@ import {
   toJsonSchemaObject,
 } from "./textGenerationUtils.ts";
 
-const CLAUDE_REASONING_EFFORT = "low";
 const CLAUDE_TIMEOUT_MS = 180_000;
 
 /**
@@ -75,6 +75,16 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
   }): Effect.Effect<S["Type"], TextGenerationError, S["DecodingServices"]> =>
     Effect.gen(function* () {
       const jsonSchemaStr = JSON.stringify(toJsonSchemaObject(outputSchemaJson));
+      const normalizedOptions = normalizeClaudeModelOptions(
+        modelSelection.model,
+        modelSelection.options,
+      );
+      const settings = {
+        ...(typeof normalizedOptions?.thinking === "boolean"
+          ? { alwaysThinkingEnabled: normalizedOptions.thinking }
+          : {}),
+        ...(normalizedOptions?.fastMode ? { fastMode: true } : {}),
+      };
 
       const runClaudeCommand = Effect.gen(function* () {
         const command = ChildProcess.make(
@@ -87,8 +97,8 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
             jsonSchemaStr,
             "--model",
             modelSelection.model,
-            "--effort",
-            modelSelection.options?.effort ?? CLAUDE_REASONING_EFFORT,
+            ...(normalizedOptions?.effort ? ["--effort", normalizedOptions.effort] : []),
+            ...(Object.keys(settings).length > 0 ? ["--settings", JSON.stringify(settings)] : []),
             "--dangerously-skip-permissions",
           ],
           {

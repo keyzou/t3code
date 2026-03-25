@@ -4,6 +4,7 @@ import { Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream } from "
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { CodexModelSelection } from "@t3tools/contracts";
+import { normalizeCodexModelOptions } from "@t3tools/shared/model";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -26,7 +27,6 @@ import {
   toJsonSchemaObject,
 } from "./textGenerationUtils.ts";
 
-const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
 
 const makeCodexTextGeneration = Effect.gen(function* () {
@@ -138,6 +138,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       const outputPath = yield* writeTempFile(operation, "codex-output", "");
 
       const runCodexCommand = Effect.gen(function* () {
+        const normalizedOptions = normalizeCodexModelOptions(
+          modelSelection.model,
+          modelSelection.options,
+        );
         const command = ChildProcess.make(
           "codex",
           [
@@ -147,8 +151,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             "read-only",
             "--model",
             modelSelection.model,
-            "--config",
-            `model_reasoning_effort="${modelSelection.options?.reasoningEffort ?? CODEX_REASONING_EFFORT}"`,
+            ...(normalizedOptions?.reasoningEffort
+              ? ["--config", `model_reasoning_effort="${normalizedOptions.reasoningEffort}"`]
+              : []),
+            ...(normalizedOptions?.fastMode ? ["--config", `service_tier="fast"`] : []),
             "--output-schema",
             schemaPath,
             "--output-last-message",
