@@ -244,7 +244,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
 
     if (input.modelSelection.provider !== "claudeAgent") {
       return yield* new TextGenerationError({
-        operation: "generateCommitMessage",
+        operation: "generatePrContent",
         detail: "Invalid model selection.",
       });
     }
