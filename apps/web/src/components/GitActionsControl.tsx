@@ -261,8 +261,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     gitRunStackedActionMutationOptions({
       cwd: gitCwd,
       queryClient,
-      model: settings.textGenerationModel ?? null,
-      textGenerationProvider: settings.textGenerationProvider,
+      modelSelection: settings.textGenerationModelSelection ?? null,
     }),
   );
   const pullMutation = useMutation(gitPullMutationOptions({ cwd: gitCwd, queryClient }));

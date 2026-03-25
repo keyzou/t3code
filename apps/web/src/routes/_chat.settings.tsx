@@ -2,20 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDownIcon, PlusIcon, RotateCcwIcon, Undo2Icon, XIcon } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
-import {
-  type ModelSlug,
-  type ProviderKind,
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
-} from "@t3tools/contracts";
+import { type ProviderKind } from "@t3tools/contracts";
 import { getModelOptions, normalizeModelSlug } from "@t3tools/shared/model";
+import { useAppSettings } from "../appSettings";
 import {
   getCustomModelOptionsByProvider,
   getCustomModelsForProvider,
   MAX_CUSTOM_MODEL_LENGTH,
   MODEL_PROVIDER_SETTINGS,
   patchCustomModels,
-  useAppSettings,
-} from "../appSettings";
+  resolveAppModelSelectionState,
+} from "../modelSelection";
 import { APP_VERSION } from "../branding";
 import { Button } from "../components/ui/button";
 import { Collapsible, CollapsibleContent } from "../components/ui/collapsible";
@@ -30,6 +27,7 @@ import {
 import { SidebarTrigger } from "../components/ui/sidebar";
 import { Switch } from "../components/ui/switch";
 import { ProviderModelPicker } from "../components/chat/ProviderModelPicker";
+import { TraitsPicker } from "../components/chat/TraitsPicker";
 import { SidebarInset } from "../components/ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../components/ui/tooltip";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
@@ -219,9 +217,10 @@ function SettingsRouteView() {
   const keybindingsConfigPath = serverConfigQuery.data?.keybindingsConfigPath ?? null;
   const availableEditors = serverConfigQuery.data?.availableEditors;
 
-  const textGenProvider = settings.textGenerationProvider;
-  const textGenDefaultModel = DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[textGenProvider];
-  const textGenModel = (settings.textGenerationModel ?? textGenDefaultModel) as ModelSlug;
+  const textGenerationModelSelection = resolveAppModelSelectionState(settings);
+  const textGenProvider = textGenerationModelSelection.provider;
+  const textGenModel = textGenerationModelSelection.model;
+  const textGenModelOptions = textGenerationModelSelection.options;
   const gitModelOptionsByProvider = getCustomModelOptionsByProvider(
     settings,
     textGenProvider,
@@ -259,10 +258,10 @@ function SettingsRouteView() {
     ...(settings.confirmThreadDelete !== defaults.confirmThreadDelete
       ? ["Delete confirmation"]
       : []),
-    ...(settings.textGenerationProvider !== defaults.textGenerationProvider
-      ? ["Git writing provider"]
+    ...(JSON.stringify(settings.textGenerationModelSelection ?? null) !==
+    JSON.stringify(defaults.textGenerationModelSelection ?? null)
+      ? ["Git writing model"]
       : []),
-    ...(settings.textGenerationModel !== defaults.textGenerationModel ? ["Git writing model"] : []),
     ...(settings.customCodexModels.length > 0 || settings.customClaudeModels.length > 0
       ? ["Custom models"]
       : []),
@@ -635,32 +634,59 @@ function SettingsRouteView() {
                 title="Git writing model"
                 description="Provider and model used for auto-generated git content."
                 resetAction={
-                  settings.textGenerationProvider !== defaults.textGenerationProvider ||
-                  settings.textGenerationModel !== defaults.textGenerationModel ? (
+                  JSON.stringify(settings.textGenerationModelSelection ?? null) !==
+                  JSON.stringify(defaults.textGenerationModelSelection ?? null) ? (
                     <SettingResetButton
                       label="git writing model"
                       onClick={() => {
                         updateSettings({
-                          textGenerationProvider: defaults.textGenerationProvider,
-                          textGenerationModel: defaults.textGenerationModel,
+                          textGenerationModelSelection: defaults.textGenerationModelSelection,
                         });
                       }}
                     />
                   ) : null
                 }
                 control={
-                  <ProviderModelPicker
-                    provider={textGenProvider}
-                    model={textGenModel}
-                    lockedProvider={null}
-                    modelOptionsByProvider={gitModelOptionsByProvider}
-                    onProviderModelChange={(provider, model) => {
-                      updateSettings({
-                        textGenerationProvider: provider,
-                        textGenerationModel: model,
-                      });
-                    }}
-                  />
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <ProviderModelPicker
+                      provider={textGenProvider}
+                      model={textGenModel}
+                      lockedProvider={null}
+                      modelOptionsByProvider={gitModelOptionsByProvider}
+                      triggerVariant="outline"
+                      triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                      onProviderModelChange={(provider, model) => {
+                        updateSettings({
+                          textGenerationModelSelection: resolveAppModelSelectionState({
+                            ...settings,
+                            textGenerationModelSelection: { provider, model },
+                          }),
+                        });
+                      }}
+                    />
+                    <TraitsPicker
+                      provider={textGenProvider}
+                      model={textGenModel}
+                      prompt=""
+                      onPromptChange={() => {}}
+                      modelOptions={textGenModelOptions}
+                      allowPromptInjectedEffort={false}
+                      triggerVariant="outline"
+                      triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                      onModelOptionsChange={(nextOptions) => {
+                        updateSettings({
+                          textGenerationModelSelection: resolveAppModelSelectionState({
+                            ...settings,
+                            textGenerationModelSelection: {
+                              provider: textGenProvider,
+                              model: textGenModel,
+                              ...(nextOptions ? { options: nextOptions } : {}),
+                            },
+                          }),
+                        });
+                      }}
+                    />
+                  </div>
                 }
               />
 

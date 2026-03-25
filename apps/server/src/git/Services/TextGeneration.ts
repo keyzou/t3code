@@ -8,7 +8,7 @@
  */
 import { ServiceMap } from "effect";
 import type { Effect } from "effect";
-import type { ChatAttachment } from "@t3tools/contracts";
+import type { ChatAttachment, ModelSelection } from "@t3tools/contracts";
 
 import type { TextGenerationError } from "../Errors.ts";
 
@@ -22,10 +22,8 @@ export interface CommitMessageGenerationInput {
   stagedPatch: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
-  /** Model to use for generation. Defaults to the provider's default if not specified. */
-  model?: string;
-  /** Provider to use for generation. Defaults to "codex" if not specified. */
-  provider?: TextGenerationProvider;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
 }
 
 export interface CommitMessageGenerationResult {
@@ -42,10 +40,8 @@ export interface PrContentGenerationInput {
   commitSummary: string;
   diffSummary: string;
   diffPatch: string;
-  /** Model to use for generation. Defaults to the provider's default if not specified. */
-  model?: string;
-  /** Provider to use for generation. Defaults to "codex" if not specified. */
-  provider?: TextGenerationProvider;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
 }
 
 export interface PrContentGenerationResult {
@@ -57,10 +53,8 @@ export interface BranchNameGenerationInput {
   cwd: string;
   message: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;
-  /** Model to use for generation. Defaults to the provider's default if not specified. */
-  model?: string;
-  /** Provider to use for generation. Defaults to "codex" if not specified. */
-  provider?: TextGenerationProvider;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
 }
 
 export interface BranchNameGenerationResult {

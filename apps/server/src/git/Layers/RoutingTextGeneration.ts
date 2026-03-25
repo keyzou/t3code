@@ -1,11 +1,11 @@
 /**
  * RoutingTextGeneration – Dispatches text generation requests to either the
- * Codex CLI or Claude CLI implementation based on the `provider` field in each
+ * Codex CLI or Claude CLI implementation based on the provider in each
  * request input.
  *
- * When `provider` is `"claudeAgent"` the request is forwarded to the Claude
- * layer; for any other value (including the default `undefined`) it falls
- * through to the Codex layer.
+ * When `modelSelection.provider` is `"claudeAgent"` the request is forwarded to
+ * the Claude layer; for any other value (including the default `undefined`) it
+ * falls through to the Codex layer.
  *
  * @module RoutingTextGeneration
  */
@@ -43,9 +43,10 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
     provider === "claudeAgent" ? claude : codex;
 
   return {
-    generateCommitMessage: (input) => route(input.provider).generateCommitMessage(input),
-    generatePrContent: (input) => route(input.provider).generatePrContent(input),
-    generateBranchName: (input) => route(input.provider).generateBranchName(input),
+    generateCommitMessage: (input) =>
+      route(input.modelSelection.provider).generateCommitMessage(input),
+    generatePrContent: (input) => route(input.modelSelection.provider).generatePrContent(input),
+    generateBranchName: (input) => route(input.modelSelection.provider).generateBranchName(input),
   } satisfies TextGenerationShape;
 });
 

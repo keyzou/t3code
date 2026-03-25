@@ -10,17 +10,11 @@
 import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "@t3tools/contracts";
+import { ClaudeModelSelection } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { TextGenerationError } from "../Errors.ts";
-import {
-  type BranchNameGenerationResult,
-  type CommitMessageGenerationResult,
-  type PrContentGenerationResult,
-  type TextGenerationShape,
-  TextGeneration,
-} from "../Services/TextGeneration.ts";
+import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -51,19 +45,16 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     operation: string,
     stream: Stream.Stream<Uint8Array, E>,
   ): Effect.Effect<string, TextGenerationError> =>
-    Effect.gen(function* () {
-      let text = "";
-      yield* Stream.runForEach(stream, (chunk) =>
-        Effect.sync(() => {
-          text += Buffer.from(chunk).toString("utf8");
-        }),
-      ).pipe(
-        Effect.mapError((cause) =>
-          normalizeCliError("claude", operation, cause, "Failed to collect process output"),
-        ),
-      );
-      return text;
-    });
+    stream.pipe(
+      Stream.decodeText(),
+      Stream.runFold(
+        () => "",
+        (acc, chunk) => acc + chunk,
+      ),
+      Effect.mapError((cause) =>
+        normalizeCliError("claude", operation, cause, "Failed to collect process output"),
+      ),
+    );
 
   /**
    * Spawn the Claude CLI with structured JSON output and return the parsed,
@@ -74,13 +65,13 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     cwd,
     prompt,
     outputSchemaJson,
-    model,
+    modelSelection,
   }: {
     operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
-    model?: string;
+    modelSelection: ClaudeModelSelection;
   }): Effect.Effect<S["Type"], TextGenerationError, S["DecodingServices"]> =>
     Effect.gen(function* () {
       const jsonSchemaStr = JSON.stringify(toJsonSchemaObject(outputSchemaJson));
@@ -95,16 +86,16 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
             "--json-schema",
             jsonSchemaStr,
             "--model",
-            model ?? DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.claudeAgent,
+            modelSelection.model,
             "--effort",
-            CLAUDE_REASONING_EFFORT,
+            modelSelection.options?.effort ?? CLAUDE_REASONING_EFFORT,
             "--dangerously-skip-permissions",
           ],
           {
             cwd,
             shell: process.platform === "win32",
             stdin: {
-              stream: Stream.make(new TextEncoder().encode(prompt)),
+              stream: Stream.encodeText(Stream.make(prompt)),
             },
           },
         );
@@ -122,7 +113,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
             readStreamAsString(operation, child.stdout),
             readStreamAsString(operation, child.stderr),
             child.exitCode.pipe(
-              Effect.map((value) => Number(value)),
               Effect.mapError((cause) =>
                 normalizeCliError(
                   "claude",
@@ -197,7 +187,9 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
   // TextGenerationShape methods
   // ---------------------------------------------------------------------------
 
-  const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = (input) => {
+  const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = Effect.fn(
+    "ClaudeTextGeneration.generateCommitMessage",
+  )(function* (input) {
     const { prompt, outputSchema } = buildCommitMessagePrompt({
       branch: input.branch,
       stagedSummary: input.stagedSummary,
@@ -205,27 +197,33 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       includeBranch: input.includeBranch === true,
     });
 
-    return runClaudeJson({
+    if (input.modelSelection.provider !== "claudeAgent") {
+      return yield* new TextGenerationError({
+        operation: "generateCommitMessage",
+        detail: "Invalid model selection.",
+      });
+    }
+
+    const generated = yield* runClaudeJson({
       operation: "generateCommitMessage",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
-      ...(input.model ? { model: input.model } : {}),
-    }).pipe(
-      Effect.map(
-        (generated) =>
-          ({
-            subject: sanitizeCommitSubject(generated.subject),
-            body: generated.body.trim(),
-            ...("branch" in generated && typeof generated.branch === "string"
-              ? { branch: sanitizeFeatureBranchName(generated.branch) }
-              : {}),
-          }) satisfies CommitMessageGenerationResult,
-      ),
-    );
-  };
+      modelSelection: input.modelSelection,
+    });
 
-  const generatePrContent: TextGenerationShape["generatePrContent"] = (input) => {
+    return {
+      subject: sanitizeCommitSubject(generated.subject),
+      body: generated.body.trim(),
+      ...("branch" in generated && typeof generated.branch === "string"
+        ? { branch: sanitizeFeatureBranchName(generated.branch) }
+        : {}),
+    };
+  });
+
+  const generatePrContent: TextGenerationShape["generatePrContent"] = Effect.fn(
+    "ClaudeTextGeneration.generatePrContent",
+  )(function* (input) {
     const { prompt, outputSchema } = buildPrContentPrompt({
       baseBranch: input.baseBranch,
       headBranch: input.headBranch,
@@ -234,43 +232,54 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       diffPatch: input.diffPatch,
     });
 
-    return runClaudeJson({
+    if (input.modelSelection.provider !== "claudeAgent") {
+      return yield* new TextGenerationError({
+        operation: "generateCommitMessage",
+        detail: "Invalid model selection.",
+      });
+    }
+
+    const generated = yield* runClaudeJson({
       operation: "generatePrContent",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
-      ...(input.model ? { model: input.model } : {}),
-    }).pipe(
-      Effect.map(
-        (generated) =>
-          ({
-            title: sanitizePrTitle(generated.title),
-            body: generated.body.trim(),
-          }) satisfies PrContentGenerationResult,
-      ),
-    );
-  };
-
-  const generateBranchName: TextGenerationShape["generateBranchName"] = (input) => {
-    return Effect.gen(function* () {
-      const { prompt, outputSchema } = buildBranchNamePrompt({
-        message: input.message,
-        attachments: input.attachments,
-      });
-
-      const generated = yield* runClaudeJson({
-        operation: "generateBranchName",
-        cwd: input.cwd,
-        prompt,
-        outputSchemaJson: outputSchema,
-        ...(input.model ? { model: input.model } : {}),
-      });
-
-      return {
-        branch: sanitizeBranchFragment(generated.branch),
-      } satisfies BranchNameGenerationResult;
+      modelSelection: input.modelSelection,
     });
-  };
+
+    return {
+      title: sanitizePrTitle(generated.title),
+      body: generated.body.trim(),
+    };
+  });
+
+  const generateBranchName: TextGenerationShape["generateBranchName"] = Effect.fn(
+    "ClaudeTextGeneration.generateBranchName",
+  )(function* (input) {
+    const { prompt, outputSchema } = buildBranchNamePrompt({
+      message: input.message,
+      attachments: input.attachments,
+    });
+
+    if (input.modelSelection.provider !== "claudeAgent") {
+      return yield* new TextGenerationError({
+        operation: "generateBranchName",
+        detail: "Invalid model selection.",
+      });
+    }
+
+    const generated = yield* runClaudeJson({
+      operation: "generateBranchName",
+      cwd: input.cwd,
+      prompt,
+      outputSchemaJson: outputSchema,
+      modelSelection: input.modelSelection,
+    });
+
+    return {
+      branch: sanitizeBranchFragment(generated.branch),
+    };
+  });
 
   return {
     generateCommitMessage,

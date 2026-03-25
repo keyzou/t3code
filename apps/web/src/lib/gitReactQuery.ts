@@ -1,4 +1,8 @@
-import type { GitStackedAction } from "@t3tools/contracts";
+import {
+  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  type GitStackedAction,
+  type ModelSelection,
+} from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "../nativeApi";
 
@@ -112,8 +116,7 @@ export function gitCheckoutMutationOptions(input: {
 export function gitRunStackedActionMutationOptions(input: {
   cwd: string | null;
   queryClient: QueryClient;
-  model?: string | null;
-  textGenerationProvider?: "codex" | "claudeAgent";
+  modelSelection?: ModelSelection | null;
 }) {
   return mutationOptions({
     mutationKey: gitMutationKeys.runStackedAction(input.cwd),
@@ -132,17 +135,18 @@ export function gitRunStackedActionMutationOptions(input: {
     }) => {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git action is unavailable.");
+      const modelSelection = input.modelSelection ?? {
+        provider: "codex" as const,
+        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
+      };
       return api.git.runStackedAction({
         actionId,
         cwd: input.cwd,
+        modelSelection,
         action,
         ...(commitMessage ? { commitMessage } : {}),
         ...(featureBranch ? { featureBranch } : {}),
         ...(filePaths ? { filePaths } : {}),
-        ...(input.model ? { textGenerationModel: input.model } : {}),
-        ...(input.textGenerationProvider
-          ? { textGenerationProvider: input.textGenerationProvider }
-          : {}),
       });
     },
     onSettled: async () => {

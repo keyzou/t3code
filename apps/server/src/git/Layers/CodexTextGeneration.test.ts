@@ -1,12 +1,17 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Effect, FileSystem, Layer, Path, Result } from "effect";
 import { expect } from "vitest";
 
 import { ServerConfig } from "../../config.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { TextGenerationError } from "../Errors.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
+
+const DEFAULT_TEST_MODEL_SELECTION = {
+  provider: "codex" as const,
+  model: "gpt-5.4-mini",
+};
 
 const CodexTextGenerationTestLayer = CodexTextGenerationLive.pipe(
   Layer.provideMerge(
@@ -208,6 +213,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           branch: "feature/codex-effect",
           stagedSummary: "M README.md",
           stagedPatch: "diff --git a/README.md b/README.md",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
         });
 
         expect(generated.subject.length).toBeLessThanOrEqual(72);
@@ -237,6 +243,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           stagedSummary: "M README.md",
           stagedPatch: "diff --git a/README.md b/README.md",
           includeBranch: true,
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
         });
 
         expect(generated.subject).toBe("Add important change");
@@ -263,6 +270,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
           commitSummary: "feat: improve orchestration flow",
           diffSummary: "2 files changed",
           diffPatch: "diff --git a/a.ts b/a.ts",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
         });
 
         expect(generated.title).toBe("Improve orchestration flow");
@@ -286,6 +294,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const generated = yield* textGeneration.generateBranchName({
           cwd: process.cwd(),
           message: "Please update session handling.",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
         });
 
         expect(generated.branch).toBe("feat/session");
@@ -307,6 +316,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const generated = yield* textGeneration.generateBranchName({
           cwd: process.cwd(),
           message: "Fix timeout behavior.",
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
         });
 
         expect(generated.branch).toBe("fix/session-timeout");
@@ -333,21 +343,20 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         yield* fs.writeFile(attachmentPath, Buffer.from("hello"));
 
         const textGeneration = yield* TextGeneration;
-        const generated = yield* textGeneration
-          .generateBranchName({
-            cwd: process.cwd(),
-            message: "Fix layout bug from screenshot.",
-            attachments: [
-              {
-                type: "image",
-                id: attachmentId,
-                name: "bug.png",
-                mimeType: "image/png",
-                sizeBytes: 5,
-              },
-            ],
-          })
-          .pipe(Effect.ensuring(fs.remove(attachmentPath).pipe(Effect.catch(() => Effect.void))));
+        const generated = yield* textGeneration.generateBranchName({
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+          cwd: process.cwd(),
+          message: "Fix layout bug from screenshot.",
+          attachments: [
+            {
+              type: "image",
+              id: attachmentId,
+              name: "bug.png",
+              mimeType: "image/png",
+              sizeBytes: 5,
+            },
+          ],
+        });
 
         expect(generated.branch).toBe("fix/ui-regression");
       }),
@@ -374,6 +383,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const textGeneration = yield* TextGeneration;
         const generated = yield* textGeneration
           .generateBranchName({
+            modelSelection: DEFAULT_TEST_MODEL_SELECTION,
             cwd: process.cwd(),
             message: "Fix layout bug from screenshot.",
             attachments: [
@@ -421,6 +431,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         const textGeneration = yield* TextGeneration;
         const result = yield* textGeneration
           .generateBranchName({
+            modelSelection: DEFAULT_TEST_MODEL_SELECTION,
             cwd: process.cwd(),
             message: "Fix layout bug from screenshot.",
             attachments: [
@@ -433,17 +444,12 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
               },
             ],
           })
-          .pipe(
-            Effect.match({
-              onFailure: (error) => ({ _tag: "Left" as const, left: error }),
-              onSuccess: (value) => ({ _tag: "Right" as const, right: value }),
-            }),
-          );
+          .pipe(Effect.result);
 
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") {
-          expect(result.left).toBeInstanceOf(TextGenerationError);
-          expect(result.left.message).toContain("missing --image input");
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure).toBeInstanceOf(TextGenerationError);
+          expect(result.failure.message).toContain("missing --image input");
         }
       }),
     ),
@@ -465,18 +471,14 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
             .generateBranchName({
               cwd: process.cwd(),
               message: "Fix websocket reconnect flake",
+              modelSelection: DEFAULT_TEST_MODEL_SELECTION,
             })
-            .pipe(
-              Effect.match({
-                onFailure: (error) => ({ _tag: "Left" as const, left: error }),
-                onSuccess: (value) => ({ _tag: "Right" as const, right: value }),
-              }),
-            );
+            .pipe(Effect.result);
 
-          expect(result._tag).toBe("Left");
-          if (result._tag === "Left") {
-            expect(result.left).toBeInstanceOf(TextGenerationError);
-            expect(result.left.message).toContain("Codex returned invalid structured output");
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure).toBeInstanceOf(TextGenerationError);
+            expect(result.failure.message).toContain("Codex returned invalid structured output");
           }
         }),
       ),
@@ -498,18 +500,16 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
             branch: "feature/codex-error",
             stagedSummary: "M README.md",
             stagedPatch: "diff --git a/README.md b/README.md",
+            modelSelection: DEFAULT_TEST_MODEL_SELECTION,
           })
-          .pipe(
-            Effect.match({
-              onFailure: (error) => ({ _tag: "Left" as const, left: error }),
-              onSuccess: (value) => ({ _tag: "Right" as const, right: value }),
-            }),
-          );
+          .pipe(Effect.result);
 
-        expect(result._tag).toBe("Left");
-        if (result._tag === "Left") {
-          expect(result.left).toBeInstanceOf(TextGenerationError);
-          expect(result.left.message).toContain("Codex CLI command failed: codex execution failed");
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure).toBeInstanceOf(TextGenerationError);
+          expect(result.failure.message).toContain(
+            "Codex CLI command failed: codex execution failed",
+          );
         }
       }),
     ),
