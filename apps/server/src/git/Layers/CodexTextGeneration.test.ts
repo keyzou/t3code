@@ -330,14 +330,14 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       ),
   );
 
-  it.effect("omits default codex reasoning effort config", () =>
+  it.effect("defaults git text generation codex effort to low", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
           subject: "Add important change",
           body: "",
         }),
-        forbidReasoningEffort: true,
+        requireReasoningEffort: "low",
       },
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;

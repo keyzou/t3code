@@ -27,6 +27,7 @@ import {
   toJsonSchemaObject,
 } from "../Utils.ts";
 
+const CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
 
 const makeCodexTextGeneration = Effect.gen(function* () {
@@ -142,6 +143,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
           modelSelection.model,
           modelSelection.options,
         );
+        const reasoningEffort =
+          modelSelection.options?.reasoningEffort ?? CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
         const command = ChildProcess.make(
           "codex",
           [
@@ -151,9 +154,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             "read-only",
             "--model",
             modelSelection.model,
-            ...(normalizedOptions?.reasoningEffort
-              ? ["--config", `model_reasoning_effort="${normalizedOptions.reasoningEffort}"`]
-              : []),
+            "--config",
+            `model_reasoning_effort="${reasoningEffort}"`,
             ...(normalizedOptions?.fastMode ? ["--config", `service_tier="fast"`] : []),
             "--output-schema",
             schemaPath,

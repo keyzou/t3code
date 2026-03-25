@@ -1,8 +1,4 @@
-import {
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
-  type GitStackedAction,
-  type ModelSelection,
-} from "@t3tools/contracts";
+import { type GitStackedAction, type ModelSelection } from "@t3tools/contracts";
 import { mutationOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 import { ensureNativeApi } from "../nativeApi";
 
