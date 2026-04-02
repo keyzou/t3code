@@ -235,6 +235,44 @@ describe("isCollapsedCursorAdjacentToInlineToken", () => {
   });
 });
 
+describe("detectComposerTrigger - provider commands", () => {
+  it("returns slash-command trigger for unknown command prefixes (provider commands)", () => {
+    const text = "/sim";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "sim",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("returns slash-command trigger for just /", () => {
+    const text = "/";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("returns slash-command trigger for full provider command name", () => {
+    const text = "/batch";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "batch",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+});
+
 describe("parseStandaloneComposerSlashCommand", () => {
   it("parses standalone /plan command", () => {
     expect(parseStandaloneComposerSlashCommand(" /plan ")).toBe("plan");

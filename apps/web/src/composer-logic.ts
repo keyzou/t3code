@@ -2,7 +2,33 @@ import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "slash-model";
-export type ComposerSlashCommand = "model" | "plan" | "default";
+
+export const T3_SLASH_COMMANDS = [
+  {
+    id: "model",
+    label: "/model",
+    description: "Switch response model for this thread",
+    standalone: false,
+  },
+  {
+    id: "plan",
+    label: "/plan",
+    description: "Switch this thread into plan mode",
+    standalone: true,
+  },
+  {
+    id: "default",
+    label: "/default",
+    description: "Switch this thread back to normal chat mode",
+    standalone: true,
+  },
+] as const;
+
+export type ComposerSlashCommand = (typeof T3_SLASH_COMMANDS)[number]["id"];
+
+const T3_STANDALONE_COMMAND_IDS = new Set<string>(
+  T3_SLASH_COMMANDS.filter((c) => c.standalone).map((c) => c.id),
+);
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -11,7 +37,6 @@ export interface ComposerTrigger {
   rangeEnd: number;
 }
 
-const SLASH_COMMANDS: readonly ComposerSlashCommand[] = ["model", "plan", "default"];
 const isInlineTokenSegment = (
   segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },
 ): boolean => segment.type !== "text";
@@ -201,15 +226,12 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
           rangeEnd: cursor,
         };
       }
-      if (SLASH_COMMANDS.some((command) => command.startsWith(commandQuery.toLowerCase()))) {
-        return {
-          kind: "slash-command",
-          query: commandQuery,
-          rangeStart: lineStart,
-          rangeEnd: cursor,
-        };
-      }
-      return null;
+      return {
+        kind: "slash-command",
+        query: commandQuery,
+        rangeStart: lineStart,
+        rangeEnd: cursor,
+      };
     }
 
     const modelMatch = /^\/model(?:\s+(.*))?$/.exec(linePrefix);
@@ -240,13 +262,13 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 export function parseStandaloneComposerSlashCommand(
   text: string,
 ): Exclude<ComposerSlashCommand, "model"> | null {
-  const match = /^\/(plan|default)\s*$/i.exec(text.trim());
-  if (!match) {
-    return null;
-  }
+  const match = /^\/(\S+)\s*$/i.exec(text.trim());
+  if (!match) return null;
   const command = match[1]?.toLowerCase();
-  if (command === "plan") return "plan";
-  return "default";
+  if (command && T3_STANDALONE_COMMAND_IDS.has(command)) {
+    return command as Exclude<ComposerSlashCommand, "model">;
+  }
+  return null;
 }
 
 export function replaceTextRange(
