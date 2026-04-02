@@ -20,6 +20,7 @@ import {
   OrchestrationThreadActivity,
   ProviderInteractionMode,
   RuntimeMode,
+  type SlashCommand,
   TerminalOpenInput,
 } from "@t3tools/contracts";
 import { applyClaudePromptEffortPrefix, normalizeModelSlug } from "@t3tools/shared/model";
@@ -41,6 +42,7 @@ import {
   expandCollapsedComposerCursor,
   parseStandaloneComposerSlashCommand,
   replaceTextRange,
+  T3_SLASH_COMMANDS,
 } from "../composer-logic";
 import {
   deriveCompletionDividerBeforeEntryId,
@@ -158,6 +160,7 @@ import { ContextWindowMeter } from "./chat/ContextWindowMeter";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { AVAILABLE_PROVIDER_OPTIONS, ProviderModelPicker } from "./chat/ProviderModelPicker";
 import { ComposerCommandItem, ComposerCommandMenu } from "./chat/ComposerCommandMenu";
+import { slashCommandsQueryOptions } from "~/lib/providerReactQuery";
 import { ComposerPendingApprovalActions } from "./chat/ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./chat/CompactComposerControlsMenu";
 import { ComposerPendingApprovalPanel } from "./chat/ComposerPendingApprovalPanel";
@@ -198,6 +201,7 @@ const IMAGE_ONLY_BOOTSTRAP_PROMPT =
 const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
+const EMPTY_SLASH_COMMANDS: SlashCommand[] = [];
 const EMPTY_AVAILABLE_EDITORS: EditorId[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
@@ -1213,6 +1217,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }),
   );
   const workspaceEntries = workspaceEntriesQuery.data?.entries ?? EMPTY_PROJECT_ENTRIES;
+  const slashCommandsQuery = useQuery(slashCommandsQueryOptions(selectedProvider));
+  const providerSlashCommands = slashCommandsQuery.data?.commands ?? EMPTY_SLASH_COMMANDS;
   const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
@@ -1227,36 +1233,49 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
 
     if (composerTrigger.kind === "slash-command") {
-      const slashCommandItems = [
-        {
-          id: "slash:model",
-          type: "slash-command",
-          command: "model",
-          label: "/model",
-          description: "Switch response model for this thread",
-        },
-        {
-          id: "slash:plan",
-          type: "slash-command",
-          command: "plan",
-          label: "/plan",
-          description: "Switch this thread into plan mode",
-        },
-        {
-          id: "slash:default",
-          type: "slash-command",
-          command: "default",
-          label: "/default",
-          description: "Switch this thread back to normal chat mode",
-        },
-      ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
+      const t3CommandItems: ComposerCommandItem[] = T3_SLASH_COMMANDS.map((cmd) => ({
+        id: `slash:${cmd.id}`,
+        type: "slash-command" as const,
+        command: cmd.id,
+        label: cmd.label,
+        description: cmd.description,
+      }));
+
+      // Filter out provider commands that collide with T3 built-in names
+      const t3CommandNames = new Set<string>(T3_SLASH_COMMANDS.map((c) => c.id));
+
+      // Sort provider commands: project → user → built-in
+      const scopeOrder: Record<string, number> = { project: 0, user: 1, builtin: 2 };
+      const providerCommandItems: ComposerCommandItem[] = providerSlashCommands
+        .filter((cmd) => !t3CommandNames.has(cmd.name))
+        .toSorted(
+          (a, b) =>
+            (scopeOrder[a.scope] ?? 3) - (scopeOrder[b.scope] ?? 3) || a.name.localeCompare(b.name),
+        )
+        .map((cmd) => ({
+          id: `provider-cmd:${selectedProvider}:${cmd.name}`,
+          type: "provider-command",
+          provider: selectedProvider,
+          commandName: cmd.name,
+          scope: cmd.scope,
+          label: `/${cmd.name}`,
+          description: cmd.description ?? "",
+        }));
+
+      const allItems = [...t3CommandItems, ...providerCommandItems];
       const query = composerTrigger.query.trim().toLowerCase();
       if (!query) {
-        return [...slashCommandItems];
+        return allItems;
       }
-      return slashCommandItems.filter(
-        (item) => item.command.includes(query) || item.label.slice(1).includes(query),
-      );
+      return allItems.filter((item) => {
+        const name =
+          item.type === "slash-command"
+            ? item.command
+            : item.type === "provider-command"
+              ? item.commandName
+              : "";
+        return name.includes(query) || item.label.slice(1).includes(query);
+      });
     }
 
     return searchableModelOptions
@@ -1275,7 +1294,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
         label: name,
         description: `${providerLabel} · ${slug}`,
       }));
-  }, [composerTrigger, searchableModelOptions, workspaceEntries]);
+  }, [
+    composerTrigger,
+    searchableModelOptions,
+    workspaceEntries,
+    providerSlashCommands,
+    selectedProvider,
+  ]);
   const composerMenuOpen = Boolean(composerTrigger);
   const activeComposerMenuItem = useMemo(
     () =>
@@ -3453,6 +3478,24 @@ export default function ChatView({ threadId }: ChatViewProps) {
       if (!trigger) return;
       if (item.type === "path") {
         const replacement = `@${item.path} `;
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+        );
+        if (applied) {
+          setComposerHighlightedItemId(null);
+        }
+        return;
+      }
+      if (item.type === "provider-command") {
+        const replacement = `/${item.commandName} `;
         const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
           snapshot.value,
           trigger.rangeEnd,

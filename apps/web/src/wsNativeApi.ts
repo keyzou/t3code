@@ -6,6 +6,7 @@ import {
   type NativeApi,
   ServerConfigUpdatedPayload,
   ServerProviderUpdatedPayload,
+  type SlashCommandsChangedPayload,
   WS_CHANNELS,
   WS_METHODS,
   type WsWelcomePayload,
@@ -19,6 +20,7 @@ const welcomeListeners = new Set<(payload: WsWelcomePayload) => void>();
 const serverConfigUpdatedListeners = new Set<(payload: ServerConfigUpdatedPayload) => void>();
 const providersUpdatedListeners = new Set<(payload: ServerProviderUpdatedPayload) => void>();
 const gitActionProgressListeners = new Set<(payload: GitActionProgressEvent) => void>();
+const slashCommandsChangedListeners = new Set<(payload: SlashCommandsChangedPayload) => void>();
 
 /**
  * Subscribe to the server welcome message. If a welcome was already received
@@ -86,6 +88,15 @@ export function onServerProvidersUpdated(
   };
 }
 
+export function onSlashCommandsChanged(
+  listener: (payload: SlashCommandsChangedPayload) => void,
+): () => void {
+  slashCommandsChangedListeners.add(listener);
+  return () => {
+    slashCommandsChangedListeners.delete(listener);
+  };
+}
+
 export function createWsNativeApi(): NativeApi {
   if (instance) return instance.api;
 
@@ -124,6 +135,16 @@ export function createWsNativeApi(): NativeApi {
   transport.subscribe(WS_CHANNELS.gitActionProgress, (message) => {
     const payload = message.data;
     for (const listener of gitActionProgressListeners) {
+      try {
+        listener(payload);
+      } catch {
+        // Swallow listener errors
+      }
+    }
+  });
+  transport.subscribe(WS_CHANNELS.providersSlashCommandsChanged, (message) => {
+    const payload = message.data;
+    for (const listener of slashCommandsChangedListeners) {
       try {
         listener(payload);
       } catch {
@@ -207,6 +228,10 @@ export function createWsNativeApi(): NativeApi {
         }
         return showContextMenuFallback(items, position);
       },
+    },
+    providers: {
+      getSlashCommands: (provider) =>
+        transport.request(WS_METHODS.providersGetSlashCommands, { provider }),
     },
     server: {
       getConfig: () => transport.request(WS_METHODS.serverGetConfig),

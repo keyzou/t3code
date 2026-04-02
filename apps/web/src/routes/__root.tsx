@@ -26,7 +26,12 @@ import { useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { useTerminalStateStore } from "../terminalStateStore";
 import { terminalRunningSubprocessFromEvent } from "../terminalActivity";
-import { onServerConfigUpdated, onServerProvidersUpdated, onServerWelcome } from "../wsNativeApi";
+import {
+  onServerConfigUpdated,
+  onServerProvidersUpdated,
+  onServerWelcome,
+  onSlashCommandsChanged,
+} from "../wsNativeApi";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
@@ -409,6 +414,11 @@ function EventRouter() {
     const unsubProvidersUpdated = onServerProvidersUpdated(() => {
       void queryClient.invalidateQueries({ queryKey: serverQueryKeys.config() });
     });
+    const unsubSlashCommandsChanged = onSlashCommandsChanged((payload) => {
+      void queryClient.invalidateQueries({
+        queryKey: providerQueryKeys.slashCommands(payload.provider),
+      });
+    });
     subscribed = true;
     return () => {
       disposed = true;
@@ -419,6 +429,7 @@ function EventRouter() {
       unsubWelcome();
       unsubServerConfigUpdated();
       unsubProvidersUpdated();
+      unsubSlashCommandsChanged();
     };
   }, [
     applyOrchestrationEvents,

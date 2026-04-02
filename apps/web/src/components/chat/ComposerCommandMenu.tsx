@@ -1,4 +1,4 @@
-import { type ProjectEntry, type ProviderKind } from "@t3tools/contracts";
+import { type ProjectEntry, type ProviderKind, type SlashCommandScope } from "@t3tools/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../composer-logic";
 import { BotIcon } from "lucide-react";
@@ -6,6 +6,8 @@ import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Command, CommandItem, CommandList } from "../ui/command";
 import { VscodeEntryIcon } from "./VscodeEntryIcon";
+import { ProviderIcon } from "./ProviderIcon";
+import { providerIconClassName } from "./ProviderModelPicker";
 
 export type ComposerCommandItem =
   | {
@@ -20,6 +22,15 @@ export type ComposerCommandItem =
       id: string;
       type: "slash-command";
       command: ComposerSlashCommand;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
+      type: "provider-command";
+      provider: ProviderKind;
+      commandName: string;
+      scope: SlashCommandScope;
       label: string;
       description: string;
     }
@@ -126,15 +137,33 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
       {props.item.type === "slash-command" ? (
         <BotIcon className="size-4 text-muted-foreground/80" />
       ) : null}
+      {props.item.type === "provider-command" ? (
+        <ProviderIcon
+          provider={props.item.provider}
+          className={cn(
+            "size-4 shrink-0",
+            providerIconClassName(props.item.provider, "text-muted-foreground/80"),
+          )}
+        />
+      ) : null}
       {props.item.type === "model" ? (
         <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
           model
         </Badge>
       ) : null}
-      <span className="flex min-w-0 items-center gap-1.5 truncate">
-        <span className="truncate">{props.item.label}</span>
+      <span className="shrink-0">{props.item.label}</span>
+      <span className="min-w-0 truncate text-muted-foreground/70 text-xs">
+        {props.item.description}
       </span>
-      <span className="truncate text-muted-foreground/70 text-xs">{props.item.description}</span>
+      {props.item.type === "provider-command" ? (
+        <Badge variant="outline" className="ml-auto shrink-0 px-1.5 py-0 text-[10px] capitalize">
+          {props.item.scope === "builtin"
+            ? "Built-in"
+            : props.item.scope === "user"
+              ? "User"
+              : "Project"}
+        </Badge>
+      ) : null}
     </CommandItem>
   );
 });
