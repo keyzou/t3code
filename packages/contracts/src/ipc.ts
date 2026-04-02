@@ -49,7 +49,9 @@ import type {
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  ProviderKind,
 } from "./orchestration";
+import type { GetSlashCommandsResult } from "./provider";
 import { EditorId } from "./editor";
 import { ServerSettings, ServerSettingsPatch } from "./settings";
 
@@ -169,6 +171,9 @@ export interface NativeApi {
       items: readonly ContextMenuItem<T>[],
       position?: { x: number; y: number },
     ) => Promise<T | null>;
+  };
+  providers: {
+    getSlashCommands: (provider: ProviderKind) => Promise<GetSlashCommandsResult>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

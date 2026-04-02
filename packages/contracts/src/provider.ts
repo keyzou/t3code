@@ -103,6 +103,28 @@ export const ProviderRespondToUserInputInput = Schema.Struct({
 });
 export type ProviderRespondToUserInputInput = typeof ProviderRespondToUserInputInput.Type;
 
+// ── Slash Command Discovery ─────────────────────────────────────────
+
+export const SlashCommandScope = Schema.Literals(["user", "project", "builtin"]);
+export type SlashCommandScope = typeof SlashCommandScope.Type;
+
+export const SlashCommand = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  scope: SlashCommandScope,
+});
+export type SlashCommand = typeof SlashCommand.Type;
+
+export const GetSlashCommandsInput = Schema.Struct({
+  provider: ProviderKind,
+});
+export type GetSlashCommandsInput = typeof GetSlashCommandsInput.Type;
+
+export const GetSlashCommandsResult = Schema.Struct({
+  commands: Schema.Array(SlashCommand),
+});
+export type GetSlashCommandsResult = typeof GetSlashCommandsResult.Type;
+
 const ProviderEventKind = Schema.Literals(["session", "notification", "request", "error"]);
 
 export const ProviderEvent = Schema.Struct({
