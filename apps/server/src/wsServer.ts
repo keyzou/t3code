@@ -7,6 +7,7 @@
  * @module Server
  */
 import http from "node:http";
+import os from "node:os";
 import type { Duplex } from "node:stream";
 
 import Mime from "@effect/platform-node/Mime";
@@ -31,6 +32,7 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import {
   Cause,
   Effect,
+  Duration,
   Exit,
   FileSystem,
   Layer,
@@ -81,6 +83,7 @@ import { ProjectFaviconResolver } from "./project/Services/ProjectFaviconResolve
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
 import { WorkspacePaths } from "./workspace/Services/WorkspacePaths.ts";
+import { scanClaudeSlashCommands, scanCodexSlashCommands } from "./provider/slashCommandScanner.ts";
 
 /**
  * ServerShape - Service API for server lifecycle control.
@@ -599,6 +602,29 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     }),
   ).pipe(Effect.forkIn(subscriptionsScope));
 
+  // Watch slash command directories for changes and push notifications.
+  // Each provider has its own set of directories to watch; when a file changes
+  // in any of them we push a debounced event so the client can refetch.
+  const userHome = os.homedir();
+  const slashCommandWatchDirs: Array<{ dir: string; provider: "claudeAgent" | "codex" }> = [
+    { dir: path.join(userHome, ".claude", "skills"), provider: "claudeAgent" },
+    { dir: path.join(userHome, ".claude", "commands"), provider: "claudeAgent" },
+    { dir: path.join(cwd, ".claude", "skills"), provider: "claudeAgent" },
+    { dir: path.join(cwd, ".claude", "commands"), provider: "claudeAgent" },
+    { dir: path.join(userHome, ".agents", "skills"), provider: "codex" },
+    { dir: path.join(cwd, ".agents", "skills"), provider: "codex" },
+  ];
+  for (const { dir, provider } of slashCommandWatchDirs) {
+    yield* fileSystem.watch(dir).pipe(
+      Stream.debounce(Duration.millis(300)),
+      Stream.runForEach(() =>
+        pushBus.publishAll(WS_CHANNELS.providersSlashCommandsChanged, { provider }),
+      ),
+      Effect.ignoreCause({ log: true }),
+      Effect.forkIn(subscriptionsScope),
+    );
+  }
+
   yield* Scope.provide(orchestrationReactor.start(), subscriptionsScope);
   yield* readiness.markOrchestrationSubscriptionsReady;
 
@@ -873,6 +899,23 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
       case WS_METHODS.serverUpdateSettings: {
         const body = stripRequestTag(request.body);
         return yield* serverSettingsManager.updateSettings(body.patch);
+      }
+
+      case WS_METHODS.providersGetSlashCommands: {
+        const { provider } = request.body;
+        const scanFn =
+          provider === "claudeAgent" ? scanClaudeSlashCommands : scanCodexSlashCommands;
+        const entries = yield* Effect.promise(() => scanFn(os.homedir(), cwd));
+        return {
+          commands: entries.map((e) => {
+            const cmd: { name: string; description?: string; scope: string } = {
+              name: e.name,
+              scope: e.scope,
+            };
+            if (e.description != null) cmd.description = e.description;
+            return cmd;
+          }),
+        };
       }
 
       default: {
