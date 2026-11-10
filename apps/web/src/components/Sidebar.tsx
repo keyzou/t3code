@@ -212,9 +212,7 @@ import {
   sortWorkingThreadsBySend,
   useSnoozeWakeClock,
   useThreadJumpHintsVisible,
-  resolveSidebarProjectScopeBadge,
   type SidebarListItem,
-  type SidebarProjectScopeBadge,
   type SidebarSection,
   resolveSidebarRowThreadId,
 } from "./Sidebar.logic";
@@ -250,7 +248,6 @@ import {
   ComboboxSearchInput,
   ComboboxItem,
   ComboboxList,
-  ComboboxStatus,
   ComboboxPopup,
   ComboboxTrigger,
   useComboboxFilter,
@@ -849,20 +846,31 @@ function useSidebarLookups() {
 }
 
 function ProjectScopeRowIcon(props: {
-  badge: SidebarProjectScopeBadge | null;
+  isSelected: boolean;
+  // Shift badge shows only inside the highlighted row, so hover never needs React state.
+  shiftArmed: boolean;
   children: ReactNode;
 }) {
-  const BadgeIcon =
-    props.badge === "add" ? PlusIcon : props.badge === "remove" ? MinusIcon : CheckIcon;
+  const badgeClass =
+    "pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover";
+  const ShiftIcon = props.isSelected ? MinusIcon : PlusIcon;
   return (
     <span className="relative flex shrink-0">
       {props.children}
-      {props.badge ? (
+      {props.isSelected ? (
         <span
-          data-project-scope-badge={props.badge}
-          className="pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover"
+          data-project-scope-badge="check"
+          className={cn(badgeClass, props.shiftArmed && "in-data-highlighted:hidden")}
         >
-          <BadgeIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
+          <CheckIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
+        </span>
+      ) : null}
+      {props.shiftArmed ? (
+        <span
+          data-project-scope-badge={props.isSelected ? "remove" : "add"}
+          className={cn(badgeClass, "hidden in-data-highlighted:grid")}
+        >
+          <ShiftIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
         </span>
       ) : null}
     </span>
@@ -1031,7 +1039,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const allProjectConfigsReady = useAtomValue(environmentProjects.projectConfigsReadyAtom);
   // Safari may click after Ctrl+click opens settings; suppress that selection until the picker reopens.
   const suppressNextScopeChangeRef = useRef(false);
-  const [highlightedProjectScopeKey, setHighlightedProjectScopeKey] = useState<string | null>(null);
+  const highlightedProjectScopeKeyRef = useRef<string | null>(null);
   // Hold dropped rows until server placement is confirmed; block another pickup from replacing the hold.
   const [optimisticDrop, setOptimisticDrop] = useState<SidebarOptimisticDrop | null>(null);
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
@@ -3023,7 +3031,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     if (open) suppressNextScopeChangeRef.current = false;
                     dispatchProjectScopeMenu({ type: "open-changed", open });
                   }}
-                  onItemHighlighted={(item) => setHighlightedProjectScopeKey(item?.value ?? null)}
+                  onItemHighlighted={(item) => {
+                    highlightedProjectScopeKeyRef.current = item?.value ?? null;
+                  }}
                   value={selectedProjectScopeItem}
                   onValueChange={(item, eventDetails) => {
                     if (suppressNextScopeChangeRef.current) {
@@ -3098,7 +3108,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         ) {
                           return;
                         }
-                        const scopeKey = highlightedProjectScopeKey;
+                        const scopeKey = highlightedProjectScopeKeyRef.current;
                         const project = scopeKey ? projectGroupByScopeKey.get(scopeKey) : null;
                         // The thread pin shortcut pins the highlighted project here.
                         if (
@@ -3153,12 +3163,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                             }}
                           >
                             <ProjectScopeRowIcon
-                              badge={resolveSidebarProjectScopeBadge({
-                                isAllProjects: !project,
-                                isSelected,
-                                isHighlighted: item.value === highlightedProjectScopeKey,
-                                shiftHeld: shortcutModifiers.shiftKey,
-                              })}
+                              isSelected={isSelected}
+                              shiftArmed={project !== null && shortcutModifiers.shiftKey}
                             >
                               {project ? (
                                 <ProjectFavicon project={project} className="size-4 shrink-0" />
@@ -3214,7 +3220,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       }}
                     </ComboboxList>
                     {scopeGroups.length > 1 ? (
-                      <ComboboxStatus>Shift-click to pick several projects</ComboboxStatus>
+                      <p className="px-2 py-1.5 text-muted-foreground text-xs">
+                        Shift-click to pick several projects
+                      </p>
                     ) : null}
                   </ComboboxPopup>
                 </Combobox>
