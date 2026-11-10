@@ -868,9 +868,17 @@ function ProjectScopeRowIcon(props: {
       {props.shiftArmed ? (
         <span
           data-project-scope-badge={props.isSelected ? "remove" : "add"}
-          className={cn(badgeClass, "hidden in-data-highlighted:grid")}
+          className={cn(
+            badgeClass,
+            "hidden in-data-highlighted:grid",
+            props.isSelected && "bg-destructive",
+          )}
         >
-          <ShiftIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
+          <ShiftIcon
+            className={cn("size-2", props.isSelected ? "text-white" : "text-primary-foreground")}
+            strokeWidth={4}
+            aria-hidden
+          />
         </span>
       ) : null}
     </span>
