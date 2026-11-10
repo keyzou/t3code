@@ -1,0 +1,216 @@
+# Builds this fork's own nightly: the Linux x64 server (CLI archive) and the Windows x64 desktop app,
+# published as a prerelease on this repository. Reuses upstream's release-desktop.yml unchanged, so
+# upstream merges never conflict here. Version: the merged upstream nightly with one digit appended
+# (…nightly.20261110.4465 -> …4465<k>), so every fork build sorts after the previous one.
+name: Fork release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  version:
+    name: Resolve version
+    if: github.repository == 'keyzou/t3code'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      ref: ${{ steps.version.outputs.ref }}
+      upstream_tag: ${{ steps.version.outputs.upstream_tag }}
+      clerk_publishable_key: ${{ steps.public_config.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ steps.public_config.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ steps.public_config.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ steps.public_config.outputs.relay_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: .env.example
+          sparse-checkout-cone-mode: false
+
+      # Workflows that sync in from upstream start enabled and target runners this fork lacks.
+      - name: Disable upstream workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow list -R "$GITHUB_REPOSITORY" --json id,path,state \
+            --jq '.[] | select(.state == "active") | select(.path | test("/(fork-release|release-desktop)\\.yml$") | not) | .id' |
+            while read -r id; do gh workflow disable -R "$GITHUB_REPOSITORY" "$id"; done
+
+      - id: version
+        name: Resolve version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          upstream_tag=""
+          while read -r sha ref; do
+            tag="${ref#refs/tags/}"; tag="${tag%^\{\}}"
+            if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then upstream_tag="$tag"; break; fi
+          done < <(git ls-remote https://github.com/pingdotgg/t3code 'refs/tags/v*-nightly.*' |
+            awk '{ n = $2; sub(/\^\{\}$/, "", n); sub(/.*\./, "", n); print n, $0 }' | sort -k1,1nr | cut -d' ' -f2-)
+          [[ -n "$upstream_tag" ]] || { echo "No upstream nightly is an ancestor of HEAD." >&2; exit 1; }
+          base="${upstream_tag#v}"
+          taken="$(gh release list -R "$GITHUB_REPOSITORY" -L 100 --json tagName --jq '.[].tagName' |
+            grep -cE "^v${base//./\\.}[0-9]$" || true)"
+          (( taken < 10 )) || { echo "Ten fork builds already exist for $upstream_tag." >&2; exit 1; }
+          {
+            echo "version=${base}${taken}"
+            echo "ref=$(git rev-parse HEAD)"
+            echo "upstream_tag=$upstream_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "Fork version ${base}${taken} on top of $upstream_tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - id: public_config
+        name: Read public T3 Connect config
+        run: |
+          value() { sed -n "s|^T3CODE_$1=||p" .env.example; }
+          {
+            echo "clerk_publishable_key=$(value CLERK_PUBLISHABLE_KEY)"
+            echo "clerk_jwt_template=$(value CLERK_JWT_TEMPLATE)"
+            echo "clerk_cli_oauth_client_id=$(value CLERK_CLI_OAUTH_CLIENT_ID)"
+            echo "relay_url=$(value RELAY_URL)"
+          } >> "$GITHUB_OUTPUT"
+
+  build_bundle:
+    name: Build JS bundle
+    needs: [version]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      T3CODE_CLERK_PUBLISHABLE_KEY: ${{ needs.version.outputs.clerk_publishable_key }}
+      T3CODE_CLERK_JWT_TEMPLATE: ${{ needs.version.outputs.clerk_jwt_template }}
+      T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: ${{ needs.version.outputs.clerk_cli_oauth_client_id }}
+      T3CODE_RELAY_URL: ${{ needs.version.outputs.relay_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter=t3... --filter=@t3tools/web... --filter=@t3tools/desktop... --filter=@t3tools/scripts...
+
+      - run: node scripts/update-release-package-versions.ts "${{ needs.version.outputs.version }}"
+
+      - run: vp run build:desktop:bundle
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: js-bundle
+          path: |
+            apps/server/dist
+            apps/desktop/dist-electron
+          if-no-files-found: error
+          retention-days: 1
+
+  # The Windows job waits for the artifact of the job whose name ends in "Build Linux x64".
+  desktop_linux_x64:
+    name: Desktop Linux x64
+    needs: [version, build_bundle]
+    uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      ref: ${{ needs.version.outputs.ref }}
+      release_channel: nightly
+      relay_client_tracing: false
+      clerk_publishable_key: ${{ needs.version.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ needs.version.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ needs.version.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ needs.version.outputs.relay_url }}
+      label: Linux x64
+      runner: ubuntu-24.04
+      platform: linux
+      target: AppImage
+      arch: x64
+      rust_target: x86_64-unknown-linux-gnu
+      resource_key: linux-x64
+      cli_archive: true
+      launch_check: true
+
+  desktop_win_x64:
+    name: Desktop Windows x64
+    needs: [version, build_bundle]
+    uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      ref: ${{ needs.version.outputs.ref }}
+      release_channel: nightly
+      relay_client_tracing: false
+      clerk_publishable_key: ${{ needs.version.outputs.clerk_publishable_key }}
+      clerk_jwt_template: ${{ needs.version.outputs.clerk_jwt_template }}
+      clerk_cli_oauth_client_id: ${{ needs.version.outputs.clerk_cli_oauth_client_id }}
+      relay_url: ${{ needs.version.outputs.relay_url }}
+      label: Windows x64
+      runner: ubuntu-24.04
+      verify_runner: windows-2025
+      platform: win
+      target: nsis
+      arch: x64
+      rust_target: x86_64-pc-windows-msvc
+      resource_key: win32-x64
+      cli_archive: true
+
+  release:
+    name: Publish fork release
+    needs: [version, desktop_linux_x64, desktop_win_x64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: release-assets
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Checksums and updater manifest
+        working-directory: release-assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          sha256sum t3-*.tar.gz t3-*.zip > SHA256SUMS
+          cat SHA256SUMS
+          for manifest in *-win-x64.yml; do mv "$manifest" "${manifest%-win-x64.yml}.yml"; done
+          rm -f builder-debug.yml
+          ls -la
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          UPSTREAM_TAG: ${{ needs.version.outputs.upstream_tag }}
+          REF: ${{ needs.version.outputs.ref }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/*.exe release-assets/*.AppImage release-assets/*.blockmap release-assets/*.yml \
+            release-assets/t3-*.tar.gz release-assets/t3-*.zip release-assets/SHA256SUMS)
+          gh release create "v$VERSION" "${files[@]}" -R "$GITHUB_REPOSITORY" --target "$REF" --prerelease \
+            --title "T3 Code (fork) v$VERSION" \
+            --notes "Fork build of \`$REF\` on top of upstream [$UPSTREAM_TAG](https://github.com/pingdotgg/t3code/releases/tag/$UPSTREAM_TAG)."
