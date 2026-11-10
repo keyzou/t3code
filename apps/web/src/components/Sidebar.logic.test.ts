@@ -11,6 +11,7 @@ import {
   getFallbackThreadIdAfterDelete,
   hasUnseenCompletion,
   resolveSidebarRowThreadId,
+  resolveSidebarProjectScopeBadge,
   orderItemsByPreferredIds,
   pinOrderKeyBetween,
   resolveSidebarSweepKeys,
@@ -1648,5 +1649,38 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
     expect(shouldCreateNewThreadInCurrentProject(false, 1, 3)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(false, 0, 0)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 2, 2)).toBe(true);
+  });
+});
+
+describe("resolveSidebarProjectScopeBadge", () => {
+  const row = { isAllProjects: false, isSelected: false, isHighlighted: true, shiftHeld: true };
+
+  it.each([
+    ["adds an unselected highlighted row", row, "add"],
+    ["removes a selected highlighted row", { ...row, isSelected: true }, "remove"],
+    [
+      "checks a selected row once Shift is released",
+      { ...row, isSelected: true, shiftHeld: false },
+      "check",
+    ],
+    [
+      "checks a selected row that is not highlighted",
+      { ...row, isSelected: true, isHighlighted: false },
+      "check",
+    ],
+    ["marks nothing on an unselected row without Shift", { ...row, shiftHeld: false }, null],
+    [
+      "marks nothing on an unselected row that is not highlighted",
+      { ...row, isHighlighted: false },
+      null,
+    ],
+    ["never offers Shift-click on All projects", { ...row, isAllProjects: true }, null],
+    [
+      "checks All projects while it is selected",
+      { ...row, isAllProjects: true, isSelected: true },
+      "check",
+    ],
+  ] as const)("%s", (_name, input, expected) => {
+    expect(resolveSidebarProjectScopeBadge(input)).toBe(expected);
   });
 });

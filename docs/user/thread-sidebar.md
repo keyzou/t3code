@@ -159,6 +159,13 @@ Pinned threads stay above the folders, and Snoozed and Settled stay below them. 
 can drag a thread onto the composer to mention it, but not within the sidebar, and the Working
 section is off. Each device keeps its own choice.
 
+## Filter threads by project
+
+Use the filter button above the thread list to show one project's threads. To show several, Shift-click
+each project, or move to a project and press Shift+Enter; Shift-click or Shift+Enter on one already
+in the filter removes it. Right-click a thread to add its project to the filter or remove it. Pick **All projects** to clear the filter.
+This is available on web and desktop.
+
 ## Settle finished work
 
 Choose **Settle thread** from its menu to move finished work out of the active list

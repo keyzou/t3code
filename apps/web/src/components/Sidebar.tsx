@@ -66,6 +66,7 @@ import {
   ChevronDownIcon,
   FolderIcon,
   ListFilterIcon,
+  MinusIcon,
   PlusIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -211,7 +212,9 @@ import {
   sortWorkingThreadsBySend,
   useSnoozeWakeClock,
   useThreadJumpHintsVisible,
+  resolveSidebarProjectScopeBadge,
   type SidebarListItem,
+  type SidebarProjectScopeBadge,
   type SidebarSection,
   resolveSidebarRowThreadId,
 } from "./Sidebar.logic";
@@ -247,6 +250,7 @@ import {
   ComboboxSearchInput,
   ComboboxItem,
   ComboboxList,
+  ComboboxStatus,
   ComboboxPopup,
   ComboboxTrigger,
   useComboboxFilter,
@@ -844,13 +848,21 @@ function useSidebarLookups() {
   };
 }
 
-function ProjectScopeRowIcon(props: { isSelected: boolean; children: ReactNode }) {
+function ProjectScopeRowIcon(props: {
+  badge: SidebarProjectScopeBadge | null;
+  children: ReactNode;
+}) {
+  const BadgeIcon =
+    props.badge === "add" ? PlusIcon : props.badge === "remove" ? MinusIcon : CheckIcon;
   return (
     <span className="relative flex shrink-0">
       {props.children}
-      {props.isSelected ? (
-        <span className="pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover">
-          <CheckIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
+      {props.badge ? (
+        <span
+          data-project-scope-badge={props.badge}
+          className="pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover"
+        >
+          <BadgeIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
         </span>
       ) : null}
     </span>
@@ -1019,7 +1031,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const allProjectConfigsReady = useAtomValue(environmentProjects.projectConfigsReadyAtom);
   // Safari may click after Ctrl+click opens settings; suppress that selection until the picker reopens.
   const suppressNextScopeChangeRef = useRef(false);
-  const highlightedProjectScopeKeyRef = useRef<string | null>(null);
+  const [highlightedProjectScopeKey, setHighlightedProjectScopeKey] = useState<string | null>(null);
   // Hold dropped rows until server placement is confirmed; block another pickup from replacing the hold.
   const [optimisticDrop, setOptimisticDrop] = useState<SidebarOptimisticDrop | null>(null);
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
@@ -2634,6 +2646,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   ? {
                       label: threadProjectGroup.displayName,
                       isActive: projectScopeKeys.includes(threadProjectGroup.projectKey),
+                      hasOtherProjects: projectScopeKeys.some(
+                        (key) => key !== threadProjectGroup.projectKey,
+                      ),
                     }
                   : null,
               isPinned,
@@ -2676,13 +2691,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         }
         switch (clicked.value) {
           case "filter-by-project":
-            if (threadProjectGroup) {
-              setProjectScopeKeys(
-                projectScopeKeys.includes(threadProjectGroup.projectKey)
-                  ? []
-                  : [threadProjectGroup.projectKey],
-              );
-            }
+            if (threadProjectGroup) toggleProjectScopeKey(threadProjectGroup.projectKey);
             return;
           case "project-settings":
             if (threadProjectGroup)
@@ -3014,9 +3023,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     if (open) suppressNextScopeChangeRef.current = false;
                     dispatchProjectScopeMenu({ type: "open-changed", open });
                   }}
-                  onItemHighlighted={(item) => {
-                    highlightedProjectScopeKeyRef.current = item?.value ?? null;
-                  }}
+                  onItemHighlighted={(item) => setHighlightedProjectScopeKey(item?.value ?? null)}
                   value={selectedProjectScopeItem}
                   onValueChange={(item, eventDetails) => {
                     if (suppressNextScopeChangeRef.current) {
@@ -3091,7 +3098,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         ) {
                           return;
                         }
-                        const scopeKey = highlightedProjectScopeKeyRef.current;
+                        const scopeKey = highlightedProjectScopeKey;
                         const project = scopeKey ? projectGroupByScopeKey.get(scopeKey) : null;
                         // The thread pin shortcut pins the highlighted project here.
                         if (
@@ -3145,7 +3152,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               if (project) handleProjectSettings(event, project);
                             }}
                           >
-                            <ProjectScopeRowIcon isSelected={isSelected}>
+                            <ProjectScopeRowIcon
+                              badge={resolveSidebarProjectScopeBadge({
+                                isAllProjects: !project,
+                                isSelected,
+                                isHighlighted: item.value === highlightedProjectScopeKey,
+                                shiftHeld: shortcutModifiers.shiftKey,
+                              })}
+                            >
                               {project ? (
                                 <ProjectFavicon project={project} className="size-4 shrink-0" />
                               ) : (
@@ -3199,6 +3213,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         );
                       }}
                     </ComboboxList>
+                    {scopeGroups.length > 1 ? (
+                      <ComboboxStatus>Shift-click to pick several projects</ComboboxStatus>
+                    ) : null}
                   </ComboboxPopup>
                 </Combobox>
               }

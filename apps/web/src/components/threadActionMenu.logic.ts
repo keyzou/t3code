@@ -73,7 +73,10 @@ export interface ThreadActionMenuState {
   readonly branch: string | null;
   readonly projectFilter: {
     readonly label: string;
+    /** The thread's project is in the project filter. */
     readonly isActive: boolean;
+    /** The filter holds a project other than this thread's. */
+    readonly hasOtherProjects: boolean;
   } | null;
   readonly isPinned: boolean;
   readonly isSettled: boolean;
@@ -111,6 +114,13 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "copy-thread",
     "copy-thread-id",
   ].includes(action);
+}
+
+function projectFilterLabel(filter: NonNullable<ThreadActionMenuState["projectFilter"]>): string {
+  if (!filter.hasOtherProjects) {
+    return filter.isActive ? "Show all projects" : `Filter by ${filter.label}`;
+  }
+  return filter.isActive ? `Remove ${filter.label} from filter` : `Add ${filter.label} to filter`;
 }
 
 export function buildThreadActionMenuItems(
@@ -185,9 +195,7 @@ export function buildThreadActionMenuItems(
       ? [
           {
             id: "filter-by-project" as const,
-            label: state.projectFilter.isActive
-              ? "Show all projects"
-              : `Filter by ${state.projectFilter.label}`,
+            label: projectFilterLabel(state.projectFilter),
             icon: "folder-tree",
           },
         ]

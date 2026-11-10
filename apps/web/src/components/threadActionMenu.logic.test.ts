@@ -74,4 +74,17 @@ describe("buildThreadActionMenuItems", () => {
     expect(items.find((item) => item.id === "archive")?.disabled).toBe(true);
     expect(items.find((item) => item.id === "turn-into-project")?.disabled).toBe(true);
   });
+
+  it.each([
+    [{ isActive: false, hasOtherProjects: false }, "Filter by Alpha"],
+    [{ isActive: true, hasOtherProjects: false }, "Show all projects"],
+    [{ isActive: false, hasOtherProjects: true }, "Add Alpha to filter"],
+    [{ isActive: true, hasOtherProjects: true }, "Remove Alpha from filter"],
+  ])("labels the project filter action for %o", (filter, label) => {
+    const items = buildThreadActionMenuItems({
+      ...baseState,
+      projectFilter: { label: "Alpha", ...filter },
+    });
+    expect(items.find((item) => item.id === "filter-by-project")?.label).toBe(label);
+  });
 });

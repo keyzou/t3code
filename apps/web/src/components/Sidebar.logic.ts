@@ -1068,6 +1068,21 @@ type SidebarProjectScopeMenuAction =
   | { readonly type: "open-changed"; readonly open: boolean }
   | { readonly type: "project-settings-opened" };
 
+export type SidebarProjectScopeBadge = "check" | "add" | "remove";
+
+/** Holding Shift turns the highlighted project's badge into what a Shift-click would do. */
+export function resolveSidebarProjectScopeBadge(input: {
+  readonly isAllProjects: boolean;
+  readonly isSelected: boolean;
+  readonly isHighlighted: boolean;
+  readonly shiftHeld: boolean;
+}): SidebarProjectScopeBadge | null {
+  if (!input.isAllProjects && input.isHighlighted && input.shiftHeld) {
+    return input.isSelected ? "remove" : "add";
+  }
+  return input.isSelected ? "check" : null;
+}
+
 export function reduceSidebarProjectScopeMenuState(
   state: SidebarProjectScopeMenuState,
   action: SidebarProjectScopeMenuAction,
