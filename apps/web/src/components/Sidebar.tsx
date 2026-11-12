@@ -147,6 +147,7 @@ import {
   useServerConfigs,
   useQuietThreadShells,
 } from "../state/entities";
+import { useShortcutModifierState } from "../shortcutModifierState";
 import { environmentPresentations } from "../state/presentation";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { environmentProjects } from "../state/projects";
@@ -847,9 +848,10 @@ function useSidebarLookups() {
 function ProjectScopeRowIcon(props: {
   isSelected: boolean;
   // Shift badge shows only inside the highlighted row, so hover never needs React state.
-  shiftArmed: boolean;
+  canShiftPick: boolean;
   children: ReactNode;
 }) {
+  const shiftArmed = useShortcutModifierState().shiftKey && props.canShiftPick;
   const badgeClass =
     "pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover";
   const ShiftIcon = props.isSelected ? MinusIcon : PlusIcon;
@@ -859,12 +861,12 @@ function ProjectScopeRowIcon(props: {
       {props.isSelected ? (
         <span
           data-project-scope-badge="check"
-          className={cn(badgeClass, props.shiftArmed && "in-data-highlighted:hidden")}
+          className={cn(badgeClass, shiftArmed && "in-data-highlighted:hidden")}
         >
           <CheckIcon className="size-2 text-primary-foreground" strokeWidth={4} aria-hidden />
         </span>
       ) : null}
-      {props.shiftArmed ? (
+      {shiftArmed ? (
         <span
           data-project-scope-badge={props.isSelected ? "remove" : "add"}
           className={cn(
@@ -3145,7 +3147,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           >
                             <ProjectScopeRowIcon
                               isSelected={isSelected}
-                              shiftArmed={project !== null && shortcutModifiers.shiftKey}
+                              canShiftPick={project !== null}
                             >
                               {project ? (
                                 <ProjectFavicon project={project} className="size-4 shrink-0" />
