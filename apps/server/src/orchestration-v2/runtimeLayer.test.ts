@@ -3234,6 +3234,36 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         commandId: CommandId.make("runtime-layer-lifecycle-resettle"),
         threadId,
       });
+      const resettledProjection = yield* orchestrator.getThreadProjection(threadId);
+      const staleAutoArchive = yield* orchestrator
+        .dispatch({
+          type: "thread.auto-archive",
+          commandId: CommandId.make("runtime-layer-lifecycle-auto-archive-stale"),
+          threadId,
+          snapshotAt: DateTime.makeUnsafe(
+            DateTime.toEpochMillis(resettledProjection.thread.updatedAt) - 1,
+          ),
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(staleAutoArchive, Orchestrator.OrchestratorDispatchError);
+      yield* orchestrator.dispatch({
+        type: "thread.auto-archive",
+        commandId: CommandId.make("runtime-layer-lifecycle-auto-archive"),
+        threadId,
+        snapshotAt: resettledProjection.thread.updatedAt,
+      });
+      assert.isNotNull((yield* orchestrator.getThreadProjection(threadId)).thread.archivedAt);
+      yield* TestClock.adjust("1 minute");
+      yield* orchestrator.dispatch({
+        type: "thread.unarchive",
+        commandId: CommandId.make("runtime-layer-lifecycle-auto-unarchive"),
+        threadId,
+      });
+      const restoredProjection = yield* orchestrator.getThreadProjection(threadId);
+      assert.isNull(restoredProjection.thread.archivedAt);
+      assert.equal(restoredProjection.thread.settledOverride, "settled");
+      // The auto-archive clock restarts here instead of at the old settledAt.
+      assert.deepEqual(restoredProjection.thread.unarchivedAt, restoredProjection.thread.updatedAt);
       yield* orchestrator.dispatch({
         type: "thread.pin",
         commandId: CommandId.make("runtime-layer-lifecycle-pin-settled"),
@@ -3242,6 +3272,15 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       const pinnedProjection = yield* orchestrator.getThreadProjection(threadId);
       assert.equal(pinnedProjection.thread.settledOverride, "active");
       assert.isNotNull(pinnedProjection.thread.unsettledAt);
+      const activeAutoArchive = yield* orchestrator
+        .dispatch({
+          type: "thread.auto-archive",
+          commandId: CommandId.make("runtime-layer-lifecycle-auto-archive-active"),
+          threadId,
+          snapshotAt: pinnedProjection.thread.updatedAt,
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(activeAutoArchive, Orchestrator.OrchestratorDispatchError);
 
       const archive = yield* orchestrator.dispatch({
         type: "thread.archive",

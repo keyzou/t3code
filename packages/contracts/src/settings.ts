@@ -95,6 +95,18 @@ export const SidebarAutoSettleAfterDays = Schema.Number.check(
 );
 export type SidebarAutoSettleAfterDays = typeof SidebarAutoSettleAfterDays.Type;
 const DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS: SidebarAutoSettleAfterDays = 7;
+export const MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS = 1;
+export const MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS = 365;
+/** Days a settled thread waits before it is archived; null is off. */
+export const SidebarAutoArchiveAfterDays = Schema.Number.check(
+  Schema.isBetween({
+    minimum: MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
+    maximum: MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
+  }),
+);
+export type SidebarAutoArchiveAfterDays = typeof SidebarAutoArchiveAfterDays.Type;
+/** Filled in when the user turns auto-archive on. */
+export const SUGGESTED_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS: SidebarAutoArchiveAfterDays = 30;
 
 export const MAX_SNOOZE_PRESET_MINUTES = 30 * 24 * 60;
 export const MAX_SNOOZE_PRESETS = 8;
@@ -1190,6 +1202,7 @@ export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
   "sidebarAutoSettleOnMerge",
   "sidebarAutoSettleAfterDays",
   "sidebarAutoSettleKeepPullRequests",
+  "sidebarAutoArchiveAfterDays",
   "continueThreadsAfterServerUpdate",
   "responseStreamingMode",
   "speechProjectCustomWords",
@@ -1228,6 +1241,7 @@ export const ProjectSettingsOverrides = Schema.Struct({
   sidebarAutoSettleOnMerge: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),
+  sidebarAutoArchiveAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoArchiveAfterDays)),
   continueThreadsAfterServerUpdate: Schema.optionalKey(Schema.Boolean),
   responseStreamingMode: Schema.optionalKey(ResponseStreamingMode),
   speechProjectCustomWords: Schema.optionalKey(SpeechCustomWords),
@@ -1261,6 +1275,7 @@ const NULLABLE_PROJECT_SETTINGS_OVERRIDES: ReadonlySet<ProjectScopedServerSettin
   "reviewGuideModelSelection",
   "pullRequestMergeMethod",
   "sidebarAutoSettleAfterDays",
+  "sidebarAutoArchiveAfterDays",
 ]);
 
 /** Reclaimable bytes from which the offline `t3 doctor` repair is worth suggesting. */
@@ -1437,6 +1452,9 @@ export const ServerSettings = Schema.Struct({
   simlockDeviceHostsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
+  ),
+  sidebarAutoArchiveAfterDays: Schema.NullOr(SidebarAutoArchiveAfterDays).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   compactIdleThreads: LegacyCompactIdleThreads.pipe(
     Schema.withDecodingDefault(Effect.succeed(false)),
@@ -1878,6 +1896,7 @@ export const ServerSettingsPatch = Schema.Struct({
   simlockDeviceHosts: Schema.optionalKey(SimlockDeviceHostConfigs),
   simlockDeviceHostsEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
+  sidebarAutoArchiveAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoArchiveAfterDays)),
   compactIdleThreads: Schema.optionalKey(LegacyCompactIdleThreads),
   idleCompaction: Schema.optionalKey(IdleCompactionMode),
   sidebarAutoSettleKeepPullRequests: Schema.optionalKey(Schema.Boolean),

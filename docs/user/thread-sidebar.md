@@ -216,6 +216,13 @@ rules to connected environments that support shared settings. Offline environmen
 and older servers keep their previous values. Changing a rule does not reopen
 already settled threads.
 
+To clear out old settled work, turn on **Auto-archive settled threads** in
+**Settings → Threads** and choose how many days a thread stays settled before it is archived
+(30 by default, up to 365). It is off until you turn it on, and applies to every settled thread,
+including ones you settled by hand. When you turn it on, threads already settled for longer than
+that are archived on the next pass. Restore a thread from **Settings → Archived threads**; it
+stays settled and waits the full number of days again before it can be archived.
+
 ## Link a pull request
 
 The server finds the PR for each unsettled thread's saved branch, even when your

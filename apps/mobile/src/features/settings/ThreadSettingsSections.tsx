@@ -13,7 +13,12 @@ import type { ComponentProps } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
+  MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
+  SUGGESTED_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
+} from "@t3tools/contracts";
 import { supportsSharedSettingsSync } from "@t3tools/client-runtime/state/shared-settings";
 import { AppText as Text } from "../../components/ui/AppText";
 import { useEnvironments } from "../../state/environments";
@@ -99,6 +104,7 @@ export function AutoSettleSettingsRows(props: {
 
   const writeToAll = (
     patch: Partial<AutoSettleSettings> & {
+      sidebarAutoArchiveAfterDays?: number | null;
       autoResumeLimitedThreads?: boolean;
       snoozeLimitedThreads?: boolean;
     },
@@ -122,6 +128,10 @@ export function AutoSettleSettingsRows(props: {
   const disabledFor = (...keys: string[]) =>
     disabled || managedSettingReason(displayTargets, ...keys) !== undefined;
   const afterDays = referenceSettings.sidebarAutoSettleAfterDays;
+  const archiveAfterDays = referenceSettings.sidebarAutoArchiveAfterDays;
+  const supportsAutoArchive = displayTargets.every(
+    (target) => target.environment.serverConfig.environment.capabilities.threadAutoArchive === true,
+  );
 
   return (
     <View className="gap-6">
@@ -170,6 +180,36 @@ export function AutoSettleSettingsRows(props: {
               value={afterDays}
               disabled={disabledFor("sidebarAutoSettleAfterDays")}
               onValueChange={(value) => writeToAll({ sidebarAutoSettleAfterDays: value })}
+            />
+          </View>
+        ) : null}
+        {supportsAutoArchive ? (
+          <SettingsSwitchRow
+            icon="archivebox"
+            label="Auto-archive settled threads"
+            subtitle="Archive threads that stayed settled this long. Restoring one starts the count again."
+            value={archiveAfterDays !== null}
+            disabled={disabledFor("sidebarAutoArchiveAfterDays")}
+            onValueChange={(value) =>
+              writeToAll({
+                sidebarAutoArchiveAfterDays: value
+                  ? SUGGESTED_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS
+                  : null,
+              })
+            }
+          />
+        ) : null}
+        {supportsAutoArchive && archiveAfterDays !== null ? (
+          <View className="flex-row items-center gap-4 px-4 py-4 android:min-h-14 android:py-3">
+            <View className="w-[22px] android:w-6" />
+            <Text className="flex-1 text-foreground text-lg android:text-base">Settled days</Text>
+            <AutoSettleDaysField
+              value={archiveAfterDays}
+              min={MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS}
+              max={MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS}
+              label="Days settled before auto-archive"
+              disabled={disabledFor("sidebarAutoArchiveAfterDays")}
+              onValueChange={(value) => writeToAll({ sidebarAutoArchiveAfterDays: value })}
             />
           </View>
         ) : null}

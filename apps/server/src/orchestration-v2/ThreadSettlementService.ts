@@ -251,6 +251,28 @@ export function resolveAutoSettlementAt(input: {
     : null;
 }
 
+/** True once the later of settling and unarchiving is more than `autoArchiveAfterDays` ago. */
+export function isAutoArchiveDue(
+  thread: Pick<ProjectionStore.ProjectionAutoArchiveCandidate, "settledAt" | "unarchivedAt">,
+  autoArchiveAfterDays: number | null,
+  nowMs: number,
+): boolean {
+  if (autoArchiveAfterDays === null) return false;
+  const anchorMs = latestMillis([toMillis(thread.settledAt), toMillis(thread.unarchivedAt)]);
+  return anchorMs !== null && anchorMs < nowMs - autoArchiveAfterDays * DAY_MS;
+}
+
+function autoArchiveConfigured(settings: import("@t3tools/contracts").ServerSettings): boolean {
+  return (
+    settings.sidebarAutoArchiveAfterDays !== null ||
+    Object.values(settings.projectSettingsOverrides).some(
+      (entry) =>
+        entry.sidebarAutoArchiveAfterDays !== undefined &&
+        entry.sidebarAutoArchiveAfterDays !== null,
+    )
+  );
+}
+
 export class ThreadSettlementServiceV2 extends Context.Service<
   ThreadSettlementServiceV2,
   {
@@ -278,12 +300,14 @@ export function autoSettlementSettingsKey(
     settings.sidebarAutoSettleOnMerge,
     settings.sidebarAutoSettleAfterDays,
     settings.sidebarAutoSettleKeepPullRequests,
+    settings.sidebarAutoArchiveAfterDays,
     Object.entries(settings.projectSettingsOverrides)
       .filter(
         ([, entry]) =>
           entry.sidebarAutoSettleOnMerge !== undefined ||
           entry.sidebarAutoSettleAfterDays !== undefined ||
-          entry.sidebarAutoSettleKeepPullRequests !== undefined,
+          entry.sidebarAutoSettleKeepPullRequests !== undefined ||
+          entry.sidebarAutoArchiveAfterDays !== undefined,
       )
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([projectId, entry]) => [
@@ -293,6 +317,9 @@ export function autoSettlementSettingsKey(
           ? "inherit"
           : entry.sidebarAutoSettleAfterDays,
         entry.sidebarAutoSettleKeepPullRequests ?? "inherit",
+        entry.sidebarAutoArchiveAfterDays === undefined
+          ? "inherit"
+          : entry.sidebarAutoArchiveAfterDays,
       ]),
   ]);
 }
@@ -581,13 +608,54 @@ export const make = Effect.gen(function* () {
           }),
       ),
     );
+  const archiveSweep = Effect.fn("ThreadSettlementServiceV2.archiveSweep")(function* () {
+    const settings = yield* settingsService.getSettings;
+    if (!autoArchiveConfigured(settings)) return;
+    const threads = yield* projections.getAutoArchiveCandidates();
+    const nowMs = DateTime.toEpochMillis(yield* DateTime.now);
+    // Runs per candidate thread; the sweep owns the span.
+    const archiveThread = Effect.fnUntraced(
+      function* (thread: (typeof threads)[number]) {
+        const { settings: projectSettings } = resolveProjectSettings(settings, thread.projectId);
+        if (!isAutoArchiveDue(thread, projectSettings.sidebarAutoArchiveAfterDays, nowMs)) return;
+        const uuid = yield* random.uuidV4();
+        yield* orchestrator.dispatch({
+          type: "thread.auto-archive",
+          commandId: CommandId.make(`server:auto-archive:${thread.id}:${uuid}`),
+          threadId: thread.id,
+          snapshotAt: thread.updatedAt,
+        });
+      },
+      (effect, thread) =>
+        effect.pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) =>
+              Effect.logWarning("automatic thread archiving skipped", {
+                threadId: thread.id,
+                cause: Cause.pretty(cause),
+              }),
+          ),
+        ),
+    );
+    yield* Effect.forEach(threads, archiveThread, { concurrency: 4, discard: true });
+  });
+  const runArchiveSweep = archiveSweep().pipe(
+    Effect.catchCauseIf(
+      (cause) => !Cause.hasInterruptsOnly(cause),
+      (cause) =>
+        Effect.logWarning("automatic thread archiving sweep failed", {
+          cause: Cause.pretty(cause),
+        }),
+    ),
+  );
   let fullSweepPending = false;
   // A thread that just stopped must not wait behind a full sweep or another thread's host
   // reads: clients hold it in Working only briefly, so a late settle makes it appear and then vanish.
   const fullSweeps = yield* makeDrainableWorker(() => {
     // Clear at the start so events during this sweep can request one follow-up.
     fullSweepPending = false;
-    return runSweep(null);
+    return runSweep(null).pipe(Effect.andThen(runArchiveSweep));
   });
   const enqueueFullSweep = () =>
     Effect.suspend(() => {

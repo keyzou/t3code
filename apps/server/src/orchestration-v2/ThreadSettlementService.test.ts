@@ -15,6 +15,7 @@ import {
   type OrchestrationProjectShell,
   type OrchestrationV2AppThread,
   type OrchestrationV2Command,
+  type OrchestrationV2ServerCommand,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ShellSnapshot,
   type OrchestrationV2ThreadShell,
@@ -467,9 +468,36 @@ describe("autoSettlementSettingsKey", () => {
     });
     assert.notStrictEqual(inherits, never);
   });
+
+  it("changes when a project overrides the auto-archive threshold", () => {
+    const inherits = ThreadSettlementService.autoSettlementSettingsKey(DEFAULT_SERVER_SETTINGS);
+    const overrides = ThreadSettlementService.autoSettlementSettingsKey({
+      ...DEFAULT_SERVER_SETTINGS,
+      projectSettingsOverrides: { [PROJECT_ID]: { sidebarAutoArchiveAfterDays: 30 } },
+    });
+    assert.notStrictEqual(inherits, overrides);
+  });
+});
+
+describe("isAutoArchiveDue", () => {
+  const nowMs = Date.parse(NOW);
+  const daysAgo = (days: number) => DateTime.makeUnsafe(nowMs - days * DAY_MS);
+  it.each([
+    ["off", { settledAt: daysAgo(400), unarchivedAt: null }, null, false],
+    ["settled past the threshold", { settledAt: daysAgo(31), unarchivedAt: null }, 30, true],
+    ["settled within the threshold", { settledAt: daysAgo(29), unarchivedAt: null }, 30, false],
+    ["unarchived recently", { settledAt: daysAgo(60), unarchivedAt: daysAgo(2) }, 30, false],
+    ["unarchived long ago", { settledAt: daysAgo(90), unarchivedAt: daysAgo(31) }, 30, true],
+  ] as const)("%s", (_, thread, days, expected) => {
+    assert.strictEqual(ThreadSettlementService.isAutoArchiveDue(thread, days, nowMs), expected);
+  });
 });
 
 type AutoSettleCommand = Extract<OrchestrationV2Command, { readonly type: "thread.auto-settle" }>;
+type AutoArchiveCommand = Extract<
+  OrchestrationV2ServerCommand,
+  { readonly type: "thread.auto-archive" }
+>;
 
 const testCrypto = SecureRandom.make((size) => new Uint8Array(size).fill(1));
 
@@ -580,6 +608,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
   const settingsChanges = yield* PubSub.unbounded<ContractServerSettings>();
   const mergedPullRequests = yield* PubSub.unbounded<PullRequestService.PullRequestMergeEvent>();
   const commands = yield* Ref.make<ReadonlyArray<AutoSettleCommand>>([]);
+  const archiveCommands = yield* Ref.make<ReadonlyArray<AutoArchiveCommand>>([]);
   const branchCalls = yield* Ref.make<
     ReadonlyArray<{ readonly cwd: string; readonly branch: string }>
   >([]);
@@ -635,6 +664,11 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
     });
 
   const dispatch: Orchestrator.OrchestratorV2Shape["dispatch"] = (command) => {
+    if (command.type === "thread.auto-archive") {
+      return Ref.update(archiveCommands, (recorded) => [...recorded, command]).pipe(
+        Effect.as({ sequence: 1, storedEvents: [] }),
+      );
+    }
     if (command.type !== "thread.auto-settle") {
       return Effect.die(new Error(`Unexpected command: ${command.type}`));
     }
@@ -743,6 +777,7 @@ const makeHarness = Effect.fn("makeThreadSettlementHarness")(function* (options:
     snapshotReads,
     candidateReads,
     commands,
+    archiveCommands,
     branchCalls,
     summaryCalls,
     summaryRecovery,
@@ -819,6 +854,62 @@ const settledEvent = (thread: OrchestrationV2AppThread): OrchestrationV2DomainEv
 });
 
 describe("ThreadSettlementServiceV2 worker", () => {
+  it.effect("archives settled threads past the project's auto-archive threshold", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(NOW));
+        const store = yield* ProjectionStore.ProjectionStoreV2;
+        const daysAgo = (days: number) => DateTime.makeUnsafe(Date.parse(NOW) - days * DAY_MS);
+        const settled = (id: string, settledDaysAgo: number) => ({
+          ...appThread(id, "settled"),
+          settledAt: daysAgo(settledDaysAgo),
+        });
+        const due = settled("archive-due", 31);
+        const recent = settled("archive-recent", 5);
+        const restored = { ...settled("archive-restored", 60), unarchivedAt: daysAgo(2) };
+        const idle = { ...appThread("archive-idle-active", null), updatedAt: daysAgo(90) };
+        const optedOut = {
+          ...settled("archive-opted-out", 31),
+          projectId: ProjectId.make("archive-opted-out-project"),
+        };
+        for (const thread of [due, recent, restored, idle, optedOut]) {
+          yield* store.apply({
+            type: "thread.created",
+            id: EventId.make(`created:${thread.id}`),
+            threadId: thread.id,
+            occurredAt: thread.createdAt,
+            payload: thread,
+          });
+        }
+        const fixture = yield* makeHarness({
+          snapshot: makeSnapshot([]),
+          projections: store,
+          settings: {
+            ...DEFAULT_SERVER_SETTINGS,
+            sidebarAutoSettleAfterDays: null,
+            sidebarAutoSettleOnMerge: false,
+            sidebarAutoArchiveAfterDays: 30,
+            projectSettingsOverrides: {
+              [optedOut.projectId]: { sidebarAutoArchiveAfterDays: null },
+            },
+          },
+        });
+        yield* Effect.gen(function* () {
+          const service = yield* ThreadSettlementService.ThreadSettlementServiceV2;
+          yield* startHarness(service, fixture.activation, fixture.snapshotReads);
+          expect(yield* Ref.get(fixture.archiveCommands)).toEqual([
+            expect.objectContaining({
+              type: "thread.auto-archive",
+              threadId: due.id,
+              snapshotAt: due.updatedAt,
+            }),
+          ]);
+          expect(yield* Ref.get(fixture.commands)).toEqual([]);
+        }).pipe(Effect.provide(fixture.layer));
+      }).pipe(Effect.provide(projectionStoreSql)),
+    ),
+  );
+
   it.effect("skips settings and PR decisions for recent branchless threads", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -838,7 +929,8 @@ describe("ThreadSettlementServiceV2 worker", () => {
           yield* startHarness(service, fixture.activation, fixture.snapshotReads);
           assert.deepEqual(yield* Ref.get(fixture.commands), []);
           assert.deepEqual(yield* Ref.get(fixture.branchCalls), []);
-          assert.equal(yield* Ref.get(fixture.settingsReadCount), 2);
+          // Start, the settle sweep, and the archive pass: none per thread.
+          assert.equal(yield* Ref.get(fixture.settingsReadCount), 3);
           yield* fixture.updateSettings({ sidebarAutoSettleAfterDays: 1 });
           yield* Queue.take(fixture.snapshotReads);
           yield* service.drain;

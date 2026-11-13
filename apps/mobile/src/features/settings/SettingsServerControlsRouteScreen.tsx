@@ -63,6 +63,7 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
     "enableAgentBrowserAccess",
     "sidebarAutoSettleOnMerge",
     "sidebarAutoSettleAfterDays",
+    "sidebarAutoArchiveAfterDays",
   ],
   "source-control": ["defaultAutoPull", "removeAgentCreditsOnMerge"],
   worktrees: [
@@ -137,6 +138,7 @@ const STREAMING_CHOICES: ReadonlyArray<{
 const AUTO_SETTLE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "sidebarAutoSettleOnMerge",
   "sidebarAutoSettleAfterDays",
+  "sidebarAutoArchiveAfterDays",
   "autoResumeLimitedThreads",
   "snoozeLimitedThreads",
 ]);

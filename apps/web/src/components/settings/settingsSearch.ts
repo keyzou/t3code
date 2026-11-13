@@ -668,6 +668,23 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "project-defaults",
   },
   {
+    id: "auto-archive-settled-threads",
+    title: "Auto-archive settled threads",
+    to: "/settings/threads",
+    searchTerms: ["archive cleanup old sidebar days automatically"],
+    requiresThreadAutoSettlement: true,
+    scope: "project-defaults",
+  },
+  {
+    id: "days-before-auto-archive",
+    title: "Days settled before auto-archive",
+    to: "/settings/threads",
+    targetId: "auto-archive-settled-threads",
+    searchTerms: ["archive cleanup old sidebar"],
+    requiresThreadAutoSettlement: true,
+    scope: "project-defaults",
+  },
+  {
     id: "thread-notifications",
     title: "Thread notifications",
     to: "/settings/general",

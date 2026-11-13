@@ -196,6 +196,15 @@ export type ProjectionThreadPullRequests = Pick<
   "id" | "projectId" | "lineage" | "settledOverride" | "settledAt" | "pullRequests"
 >;
 
+/** A settled, unarchived thread; it archives once the later of settledAt and unarchivedAt is old enough. */
+export interface ProjectionAutoArchiveCandidate {
+  readonly id: ThreadId;
+  readonly projectId: ProjectId;
+  readonly settledAt: DateTime.Utc;
+  readonly unarchivedAt: DateTime.Utc | null;
+  readonly updatedAt: DateTime.Utc;
+}
+
 export type ProjectionSettlementCandidate = Pick<
   OrchestrationV2ThreadShell,
   | "id"
@@ -570,6 +579,10 @@ export interface ProjectionStoreV2Shape {
   readonly getSettlementCandidates: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionSettlementCandidate>, ProjectionStoreV2Error>;
+  readonly getAutoArchiveCandidates: () => Effect.Effect<
+    ReadonlyArray<ProjectionAutoArchiveCandidate>,
+    ProjectionStoreV2Error
+  >;
   readonly getThreadsWithPullRequests: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionThreadPullRequests>, ProjectionStoreV2Error>;
@@ -7193,6 +7206,49 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
     );
 
+    const getAutoArchiveCandidates: ProjectionStoreV2Shape["getAutoArchiveCandidates"] = Effect.fn(
+      "ProjectionStore.getAutoArchiveCandidates",
+    )(
+      function* () {
+        const rows = yield* sql<{
+          readonly thread_id: string;
+          readonly project_id: string;
+          readonly settled_at: string;
+          readonly unarchived_at: string | null;
+          readonly updated_at: string;
+        }>`
+          SELECT t.thread_id,
+            json_extract(t.payload_json, '$.projectId') AS project_id,
+            json_extract(t.payload_json, '$.settledAt') AS settled_at,
+            json_extract(t.payload_json, '$.unarchivedAt') AS unarchived_at,
+            json_extract(t.payload_json, '$.updatedAt') AS updated_at
+          FROM orchestration_v2_projection_threads t
+          WHERE t.deleted_at IS NULL
+            AND json_extract(t.payload_json, '$.archivedAt') IS NULL
+            AND json_extract(t.payload_json, '$.settledOverride') = 'settled'
+            AND json_extract(t.payload_json, '$.settledAt') IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM orchestration_v2_projection_runs active
+              WHERE active.thread_id = t.thread_id
+                AND active.status IN ('preparing', 'starting', 'running', 'waiting')
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM orchestration_v2_projection_runtime_requests request
+              WHERE request.thread_id = t.thread_id AND request.status = 'pending'
+            )
+          ORDER BY t.thread_id ASC
+        `;
+        return rows.map((row): ProjectionAutoArchiveCandidate => ({
+          id: ThreadId.make(row.thread_id),
+          projectId: ProjectId.make(row.project_id),
+          settledAt: DateTime.makeUnsafe(row.settled_at),
+          unarchivedAt: row.unarchived_at === null ? null : DateTime.makeUnsafe(row.unarchived_at),
+          updatedAt: DateTime.makeUnsafe(row.updated_at),
+        }));
+      },
+      Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
+    );
+
     const getThreadsWithPullRequests: ProjectionStoreV2Shape["getThreadsWithPullRequests"] =
       Effect.fn("ProjectionStore.getThreadsWithPullRequests")(
         function* (threadId) {
@@ -7972,6 +8028,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       findGuestShareThreadId: readOnReader(findGuestShareThreadId),
       getThread: readOnReader(getThread),
       getSettlementCandidates: readOnReader(getSettlementCandidates),
+      getAutoArchiveCandidates: readOnReader(getAutoArchiveCandidates),
       getThreadsWithPullRequests: readOnReader(getThreadsWithPullRequests),
       getThreadTitles: readOnReader(getThreadTitles),
       getThreadLinkMetadata: readOnReader(getThreadLinkMetadata),

@@ -608,6 +608,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.guest-message.dismiss":
     case "thread.settle":
     case "thread.auto-settle":
+    case "thread.auto-archive":
     case "thread.unsettle":
     case "thread.snooze":
     case "thread.unsnooze":
@@ -4225,7 +4226,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             updatedAt: now,
           };
         case "thread.unarchive":
-          return { ...thread, archivedAt: null, updatedAt: now };
+          return { ...thread, archivedAt: null, unarchivedAt: now, updatedAt: now };
         case "thread.settle": {
           const wasPinned = thread.pinnedAt != null;
           const alreadySettled =
@@ -14193,6 +14194,34 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             threadId: command.threadId,
             ...(command.settledAt === undefined ? {} : { settledAt: command.settledAt }),
           },
+          events,
+          effects,
+        );
+        break;
+      }
+      case "thread.auto-archive": {
+        // Recheck live state; a thread touched since the sweep read it keeps its place.
+        const thread = yield* projectionStore
+          .getThread(command.threadId)
+          .pipe(
+            Effect.mapError(
+              (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+            ),
+          );
+        if (
+          thread.archivedAt !== null ||
+          thread.settledOverride !== "settled" ||
+          thread.settledAt === null ||
+          DateTime.toEpochMillis(thread.updatedAt) > DateTime.toEpochMillis(command.snapshotAt)
+        ) {
+          return yield* new OrchestratorDispatchError({
+            commandId: command.commandId,
+            commandType: command.type,
+            cause: `Thread ${command.threadId} changed before automatic archiving.`,
+          });
+        }
+        yield* dispatchThreadMutation(
+          { type: "thread.archive", commandId: command.commandId, threadId: command.threadId },
           events,
           effects,
         );

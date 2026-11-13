@@ -18,8 +18,11 @@ import {
 import {
   DEFAULT_UNIFIED_SETTINGS,
   type DiffLayout,
+  MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  SUGGESTED_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS,
   type ResponseStreamingMode,
   type QuitConfirmationMode,
   SidebarProjectSortOrder,
@@ -500,6 +503,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
       ? ["Auto-settle merged threads"]
       : []),
+    ...(settings.sidebarAutoArchiveAfterDays !==
+    DEFAULT_UNIFIED_SETTINGS.sidebarAutoArchiveAfterDays
+      ? ["Auto-archive settled threads"]
+      : []),
     ...(settings.autoResumeLimitedThreads !== DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads
       ? ["Resume after usage limits"]
       : []),
@@ -667,6 +674,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
+      sidebarAutoArchiveAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoArchiveAfterDays,
       autoResumeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads,
       snoozeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.snoozeLimitedThreads,
       snoozePresets: DEFAULT_UNIFIED_SETTINGS.snoozePresets,
@@ -722,9 +730,15 @@ const AUTO_SETTLE_DEFAULT_DAYS = DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfter
 function AutoSettleDaysInput({
   value,
   onCommit,
+  min = MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  max = MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  "aria-label": ariaLabel = "Days of inactivity before auto-settle",
 }: {
   value: number;
   onCommit: (days: number) => void;
+  min?: number;
+  max?: number;
+  "aria-label"?: string;
 }) {
   const [draft, setDraft] = useState(String(value));
   const [draftSource, setDraftSource] = useState(value);
@@ -737,23 +751,19 @@ function AutoSettleDaysInput({
     <Input
       size="sm"
       type="number"
-      min={MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS}
-      max={MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS}
+      min={min}
+      max={max}
       className="w-full sm:w-24"
       value={draft}
       onChange={(event) => {
         setDraft(event.target.value);
         const parsed = Number(event.target.value);
-        if (
-          Number.isInteger(parsed) &&
-          parsed >= MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS &&
-          parsed <= MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS
-        ) {
+        if (Number.isInteger(parsed) && parsed >= min && parsed <= max) {
           onCommit(parsed);
         }
       }}
       onBlur={() => setDraft(String(value))}
-      aria-label="Days of inactivity before auto-settle"
+      aria-label={ariaLabel}
     />
   );
 }
@@ -1680,6 +1690,9 @@ export function ThreadsSettingsPanel() {
   const supportsAutoSettlementScope = connectedEnvironments.every(
     (target) => target.serverConfig?.environment.capabilities.threadAutoSettlementScope === true,
   );
+  const supportsAutoArchive = connectedEnvironments.every(
+    (target) => target.serverConfig?.environment.capabilities.threadAutoArchive === true,
+  );
 
   const textGenerationTargets = useTextGenerationTargets({
     environmentId,
@@ -1917,6 +1930,59 @@ export function ThreadsSettingsPanel() {
                     updateSettings({ sidebarAutoSettleKeepPullRequests: checked })
                   }
                   aria-label="Keep threads with a PR"
+                />
+              }
+            />
+          ) : null}
+          {supportsAutoArchive ? (
+            <SettingsRow
+              serverScoped
+              settingKeys={["sidebarAutoArchiveAfterDays"]}
+              {...searchableSetting("auto-archive-settled-threads")}
+              description="Archive threads that stayed settled this long. Restore them from Archived threads."
+              resetAction={
+                settings.sidebarAutoArchiveAfterDays !==
+                DEFAULT_UNIFIED_SETTINGS.sidebarAutoArchiveAfterDays ? (
+                  <SettingResetButton
+                    label="auto-archive"
+                    onClick={() =>
+                      updateSettings({
+                        sidebarAutoArchiveAfterDays:
+                          DEFAULT_UNIFIED_SETTINGS.sidebarAutoArchiveAfterDays,
+                      })
+                    }
+                  />
+                ) : null
+              }
+              control={
+                <ScopedSwitch
+                  settingKeys={["sidebarAutoArchiveAfterDays"]}
+                  checked={settings.sidebarAutoArchiveAfterDays !== null}
+                  onCheckedChange={(checked) =>
+                    updateSettings({
+                      sidebarAutoArchiveAfterDays: checked
+                        ? SUGGESTED_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS
+                        : null,
+                    })
+                  }
+                  aria-label="Auto-archive settled threads"
+                />
+              }
+            />
+          ) : null}
+          {supportsAutoArchive && settings.sidebarAutoArchiveAfterDays !== null ? (
+            <SettingsRow
+              serverScoped
+              settingKeys={["sidebarAutoArchiveAfterDays"]}
+              title={searchableSetting("days-before-auto-archive").title}
+              description="Restoring an archived thread starts the count again."
+              control={
+                <AutoSettleDaysInput
+                  value={settings.sidebarAutoArchiveAfterDays}
+                  min={MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS}
+                  max={MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS}
+                  aria-label="Days settled before auto-archive"
+                  onCommit={(days) => updateSettings({ sidebarAutoArchiveAfterDays: days })}
                 />
               }
             />
