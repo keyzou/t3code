@@ -46,17 +46,14 @@ import {
   useUpdateEnvironmentSettings,
   useUpdateEnvironmentModelPreferences,
   useToggleEnvironmentModelFavorite,
+  useDefaultEnvironmentId,
 } from "../../hooks/useSettings";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { ensureLocalApi } from "../../localApi";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { cn } from "../../lib/utils";
 import { resolveAppModelSelectionState } from "../../modelSelection";
-import {
-  useEnvironments,
-  usePrimaryEnvironmentId,
-  type EnvironmentPresentation,
-} from "../../state/environments";
+import { useEnvironments, type EnvironmentPresentation } from "../../state/environments";
 import {
   EMPTY_SERVER_PROVIDERS,
   providersIgnoringCheckedAtAtom,
@@ -320,15 +317,15 @@ export function ProviderSettingsPanel(target: ProviderSettingsTarget) {
 
 function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
   const { environments, isReady } = useEnvironments();
-  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const defaultEnvironmentId = useDefaultEnvironmentId(environments);
   const searchTargetId = useSettingsSearchTargetId();
   const options = buildProviderEnvironmentOptions(
     environments,
-    primaryEnvironmentId,
+    defaultEnvironmentId,
     target.environmentIds,
   );
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(
-    target.environmentId ?? primaryEnvironmentId,
+    target.environmentId ?? defaultEnvironmentId,
   );
   const targetEnvironmentMissing =
     target.environmentId !== undefined &&
@@ -337,7 +334,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
   const effectiveEnvironmentId =
     target.scoped || targetEnvironmentMissing
       ? target.environmentId
-      : resolveSelectedProviderEnvironmentId(options, selectedEnvironmentId, primaryEnvironmentId);
+      : resolveSelectedProviderEnvironmentId(options, selectedEnvironmentId, defaultEnvironmentId);
   const selectedEnvironment =
     options.find((environment) => environment.environmentId === effectiveEnvironmentId) ?? null;
   const selectedEnvironmentCanRenderSettings =

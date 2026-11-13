@@ -14,7 +14,7 @@ import {
   resolveDefaultProjectRef,
 } from "../hooks/useHandleNewThread";
 import { createScratchProjectActions } from "../hooks/useScratchProject";
-import { getClientSettings } from "../hooks/useSettings";
+import { getClientSettings, resolveDefaultEnvironmentId } from "../hooks/useSettings";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { selectProjectGroupingSettings } from "@t3tools/client-runtime/state/project-grouping";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
@@ -40,12 +40,18 @@ const CHAT_ROUTE_ID = "/_chat";
  */
 export function installChatRouteCommands(router: AnyRouter): () => void {
   const handleNewThread = createNewThreadHandler(router);
+  const readEnvironments = () =>
+    [...appAtomRegistry.get(environmentPresentations.presentationsAtom)].map(
+      ([environmentId, presentation]) => ({ ...presentation, environmentId }),
+    );
   const scratch = createScratchProjectActions({
-    environments: () =>
-      [...appAtomRegistry.get(environmentPresentations.presentationsAtom)].map(
-        ([environmentId, presentation]) => ({ ...presentation, environmentId }),
+    environments: readEnvironments,
+    defaultEnvironmentId: () =>
+      resolveDefaultEnvironmentId(
+        getClientSettings().defaultEnvironmentId,
+        readEnvironments(),
+        appAtomRegistry.get(primaryEnvironmentIdAtom),
       ),
-    primaryEnvironmentId: () => appAtomRegistry.get(primaryEnvironmentIdAtom),
     registry: appAtomRegistry,
     handleNewThread,
   });

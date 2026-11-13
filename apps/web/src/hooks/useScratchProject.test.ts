@@ -28,19 +28,19 @@ function actions(
   ];
   return createScratchProjectActions({
     environments: () => environments,
-    primaryEnvironmentId: () => primary,
+    defaultEnvironmentId: () => primary,
     registry: AtomRegistry.make(),
     handleNewThread: async () => null,
   });
 }
 
 describe("scratchEnvironmentId", () => {
-  it("prefers the primary environment over the one on screen", () => {
+  it("prefers the default environment over the one on screen", () => {
     expect(actions(local, "/local/scratch").scratchEnvironmentId(remote)).toBe(local);
     expect(actions(local, "/local/scratch").scratchEnvironmentId(null)).toBe(local);
   });
 
-  it("falls back when the primary environment offers no scratch root", () => {
+  it("falls back when the default environment offers no scratch root", () => {
     expect(actions(local, null).scratchEnvironmentId(remote)).toBe(remote);
     expect(actions(null, null).scratchEnvironmentId(remote)).toBe(remote);
     expect(actions(null, null, null).scratchEnvironmentId(remote)).toBe(other);

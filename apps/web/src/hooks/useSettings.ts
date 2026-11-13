@@ -50,7 +50,11 @@ import { toastManager } from "~/components/ui/toast";
 import { isHostedStaticApp } from "~/hostedPairing";
 import { environmentCatalog } from "~/connection/catalog";
 import { primaryServerSettingsAtom, serverEnvironment } from "~/state/server";
-import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
+import {
+  useEnvironments,
+  usePrimaryEnvironment,
+  usePrimaryEnvironmentId,
+} from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useTheme } from "./useTheme";
 import {
@@ -394,6 +398,32 @@ function resolveEnvironmentIdentificationMode(input: {
   return input.paletteThemeActive && !input.paletteThemeAllowsArtwork && isArtwork
     ? "pill"
     : input.mode;
+}
+
+type DefaultEnvironmentCandidate = {
+  readonly environmentId: EnvironmentId;
+  readonly connection: { readonly phase: string };
+};
+
+/** Where new no-project threads and Settings land: the chosen environment while connected, else the primary. */
+export function resolveDefaultEnvironmentId(
+  chosen: EnvironmentId | null,
+  environments: Iterable<DefaultEnvironmentCandidate>,
+  primary: EnvironmentId | null,
+): EnvironmentId | null {
+  for (const environment of environments) {
+    if (environment.environmentId === chosen && environment.connection.phase === "connected") {
+      return chosen;
+    }
+  }
+  return primary;
+}
+
+export function useDefaultEnvironmentId(
+  environments: readonly DefaultEnvironmentCandidate[],
+): EnvironmentId | null {
+  const chosen = useClientSettings((settings) => settings.defaultEnvironmentId);
+  return resolveDefaultEnvironmentId(chosen, environments, usePrimaryEnvironmentId());
 }
 
 export function useEnvironmentIdentificationMode(): EnvironmentIdentificationMode {

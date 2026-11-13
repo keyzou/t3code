@@ -1295,6 +1295,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["link peer another machine vps agents work there handoff pairing code"],
   },
   {
+    id: "default-environment",
+    title: "Default environment",
+    to: "/settings/connections",
+    searchTerms: ["new thread no project scratch target machine primary remote preferred"],
+  },
+  {
     id: "remote-environments",
     title: "Environments",
     to: "/settings/connections",

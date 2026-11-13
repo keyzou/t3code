@@ -1,4 +1,8 @@
-import { DEFAULT_SERVER_SETTINGS, ProviderInstanceId } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type EnvironmentId,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS, type ClientSettings } from "@t3tools/contracts/settings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -20,6 +24,7 @@ import {
   persistClientSettingsPatch,
   persistClientSettingsUpdate,
   prepareModelPreferencesPatch,
+  resolveDefaultEnvironmentId,
 } from "./useSettings";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 
@@ -280,6 +285,24 @@ describe("mergeEnvironmentSettings", () => {
 
     expect(settings.sidebarAutoSettleAfterDays).toBe(14);
     expect(settings.sidebarAutoSettleOnMerge).toBe(false);
+  });
+});
+
+describe("resolveDefaultEnvironmentId", () => {
+  const hq = "hq" as EnvironmentId;
+  const daedalus = "daedalus" as EnvironmentId;
+  const environments = (phase: string) => [
+    { environmentId: hq, connection: { phase: "connected" } },
+    { environmentId: daedalus, connection: { phase } },
+  ];
+
+  it("uses the chosen environment only while it is connected", () => {
+    expect(resolveDefaultEnvironmentId(daedalus, environments("connected"), hq)).toBe(daedalus);
+    expect(resolveDefaultEnvironmentId(daedalus, environments("connecting"), hq)).toBe(hq);
+    expect(
+      resolveDefaultEnvironmentId("gone" as EnvironmentId, environments("connected"), hq),
+    ).toBe(hq);
+    expect(resolveDefaultEnvironmentId(null, environments("connected"), hq)).toBe(hq);
   });
 });
 
