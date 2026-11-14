@@ -92,6 +92,11 @@ import { ScopedSwitch } from "./ScopedSwitch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
+  autoSettleDaysField,
+  cancelAutoSettleDaysField,
+  commitAutoSettleDaysField,
+  editAutoSettleDaysField,
+  failAutoSettleDaysField,
   getChangedBrowserSettingLabels,
   getChangedTypographySettingLabels,
   hasChangedBackgroundActivitySettings,
@@ -99,6 +104,7 @@ import {
   projectGroupingModeFromToggle,
   readLastEnabledProjectGroupingMode,
   rememberEnabledProjectGroupingMode,
+  syncAutoSettleDaysField,
 } from "./SettingsPanels.logic";
 import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
@@ -743,17 +749,24 @@ function AutoSettleDaysInput({
   "aria-label": ariaLabel = "Days of inactivity before auto-settle",
 }: {
   value: number;
-  onCommit: (days: number) => void;
+  onCommit: (days: number, options: { onFailed: () => void }) => void;
   min?: number;
   max?: number;
   "aria-label"?: string;
 }) {
-  const [draft, setDraft] = useState(String(value));
-  const [draftSource, setDraftSource] = useState(value);
-  if (draftSource !== value) {
-    setDraftSource(value);
-    setDraft(String(value));
-  }
+  const [stored, setField] = useState(() => autoSettleDaysField(value));
+  const field = syncAutoSettleDaysField(stored, value);
+  if (field !== stored) setField(field);
+
+  const commit = () => {
+    const next = commitAutoSettleDaysField(field, min, max);
+    setField(next.field);
+    if (next.submit === null) return;
+    const { revision } = next.field;
+    onCommit(next.submit, {
+      onFailed: () => setField((current) => failAutoSettleDaysField(current, revision)),
+    });
+  };
 
   return (
     <Input
@@ -762,15 +775,19 @@ function AutoSettleDaysInput({
       min={min}
       max={max}
       className="w-full sm:w-24"
-      value={draft}
-      onChange={(event) => {
-        setDraft(event.target.value);
-        const parsed = Number(event.target.value);
-        if (Number.isInteger(parsed) && parsed >= min && parsed <= max) {
-          onCommit(parsed);
+      value={field.draft}
+      onChange={(event) => setField(editAutoSettleDaysField(field, event.target.value))}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter") commit();
+        if (event.key === "Escape" && field.dirty) {
+          // An unhandled Escape closes the settings page, and the blur that follows would save.
+          event.preventDefault();
+          event.stopPropagation();
+          setField(cancelAutoSettleDaysField(field));
         }
       }}
-      onBlur={() => setDraft(String(value))}
       aria-label={ariaLabel}
     />
   );
@@ -1954,7 +1971,9 @@ export function ThreadsSettingsPanel() {
               control={
                 <AutoSettleDaysInput
                   value={settings.sidebarAutoSettleAfterDays}
-                  onCommit={(days) => updateSettings({ sidebarAutoSettleAfterDays: days })}
+                  onCommit={(days, options) =>
+                    updateSettings({ sidebarAutoSettleAfterDays: days }, options)
+                  }
                 />
               }
             />
@@ -2025,7 +2044,9 @@ export function ThreadsSettingsPanel() {
                   min={MIN_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS}
                   max={MAX_SIDEBAR_AUTO_ARCHIVE_AFTER_DAYS}
                   aria-label="Days settled before auto-archive"
-                  onCommit={(days) => updateSettings({ sidebarAutoArchiveAfterDays: days })}
+                  onCommit={(days, options) =>
+                    updateSettings({ sidebarAutoArchiveAfterDays: days }, options)
+                  }
                 />
               }
             />
