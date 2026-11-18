@@ -1,12 +1,16 @@
+import { useGT } from "gt-react";
+
 import { updateClientSettings, useClientSettings } from "../../hooks/useSettings";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 
 const PRIMARY_VALUE = "primary";
 
 export function DefaultEnvironmentSetting() {
+  const gt = useGT();
+  const setting = useSearchableSetting();
   const chosen = useClientSettings((settings) => settings.defaultEnvironmentId);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
@@ -18,24 +22,31 @@ export function DefaultEnvironmentSetting() {
   const primaryEnvironment = environments.find(
     (environment) => environment.environmentId === primaryEnvironmentId,
   );
-  const primaryLabel = primaryEnvironment ? `${primaryEnvironment.label} (this app)` : "Automatic";
+  const primaryLabel = primaryEnvironment
+    ? gt("{environment} (this app)", { environment: primaryEnvironment.label })
+    : gt("Automatic");
   const chosenEnvironment = choices.find((environment) => environment.environmentId === chosen);
   const selectedLabel =
-    chosen === null ? primaryLabel : (chosenEnvironment?.label ?? "Removed environment");
+    chosen === null ? primaryLabel : (chosenEnvironment?.label ?? gt("Removed environment"));
   const fallsBack = chosen !== null && chosenEnvironment?.connection.phase !== "connected";
 
   return (
     <SettingsRow
-      {...searchableSetting("default-environment")}
+      {...setting("default-environment")}
       description={
         fallsBack
-          ? `${selectedLabel} isn't connected, so ${primaryLabel} is used until it is.`
-          : "Where new threads without a project start, and which environment Settings opens on. Saved on this device."
+          ? gt("{selected} isn't connected, so {fallback} is used until it is.", {
+              selected: selectedLabel,
+              fallback: primaryLabel,
+            })
+          : gt(
+              "Where new threads without a project start, and which environment Settings opens on. Saved on this device.",
+            )
       }
       resetAction={
         chosen !== null ? (
           <SettingResetButton
-            label="default environment"
+            ariaLabel={gt("Reset default environment to default")}
             onClick={() => void updateClientSettings({ defaultEnvironmentId: null })}
           />
         ) : null
@@ -48,7 +59,11 @@ export function DefaultEnvironmentSetting() {
             void updateClientSettings({ defaultEnvironmentId: next?.environmentId ?? null });
           }}
         >
-          <SelectTrigger size="sm" className="w-full sm:w-48" aria-label="Default environment">
+          <SelectTrigger
+            size="sm"
+            className="w-full sm:w-48"
+            aria-label={gt("Default environment")}
+          >
             <SelectValue>{selectedLabel}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>

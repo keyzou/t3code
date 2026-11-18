@@ -2,6 +2,7 @@ import { type EnvironmentId, T3_PROJECT_FILE_NAME, type T3ProjectFile } from "@t
 import { parseT3ProjectFile } from "@t3tools/shared/t3ProjectFile";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { useMessages } from "gt-react";
 import { createContext, type ReactNode, useContext } from "react";
 
 import { useDefaultEnvironmentId } from "../../hooks/useSettings";
@@ -65,15 +66,16 @@ function useResolvedSettingsScope(rawSearch: SettingsScopeSearch, singleEnvironm
   const groups = useSettingsProjectGroups();
   const { environments: availableEnvironments } = useEnvironments();
   const defaultEnvironmentId = useDefaultEnvironmentId(availableEnvironments);
+  const m = useMessages();
   const search = singleEnvironment
     ? selectSingleEnvironmentScope(
         rawSearch,
-        resolveSettingsScope(rawSearch, groups, availableEnvironments),
+        resolveSettingsScope(rawSearch, groups, availableEnvironments, m),
         availableEnvironments,
         defaultEnvironmentId,
       )
     : rawSearch;
-  const scope = resolveSettingsScope(search, groups, availableEnvironments);
+  const scope = resolveSettingsScope(search, groups, availableEnvironments, m);
   const projectFiles = useMemberProjectFiles(scope);
   const pendingWrites = useAtomValue(pendingScopedWritesAtom);
   const selected = selectScopedSettingsEnvironments(
