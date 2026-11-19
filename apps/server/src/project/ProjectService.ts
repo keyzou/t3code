@@ -411,17 +411,24 @@ export const make = Effect.gen(function* () {
   });
 
   // Folded settings, not the project record, hold the scripts that runs use (resolveProjectScripts).
+  // A patch entry replaces the project's whole override, so it carries the saved keys.
   const saveScripts = (projectId: ProjectId, scripts: ReadonlyArray<ProjectScript>) =>
-    serverSettings
-      .updateSettings({
-        projectSettingsOverrides: { [projectId]: { defaultProjectScripts: scripts } },
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new ProjectOperationError({ operation: "save-project-scripts", projectId, cause }),
-        ),
-      );
+    serverSettings.getSettings.pipe(
+      Effect.flatMap(({ projectSettingsOverrides }) =>
+        serverSettings.updateSettings({
+          projectSettingsOverrides: {
+            [projectId]: {
+              ...projectSettingsOverrides[projectId],
+              defaultProjectScripts: scripts,
+            },
+          },
+        }),
+      ),
+      Effect.mapError(
+        (cause) =>
+          new ProjectOperationError({ operation: "save-project-scripts", projectId, cause }),
+      ),
+    );
 
   const create: ProjectService["Service"]["create"] = Effect.fn("ProjectService.create")(
     function* (input) {

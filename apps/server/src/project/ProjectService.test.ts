@@ -707,6 +707,15 @@ it.effect("runs worktree setup scripts saved through project create and update",
       scripts: [script("check", false), script("install", true)],
     });
     assert.equal(yield* setupScriptId(), "install");
+    const model = { instanceId: ProviderInstanceId.make("claudeAgent"), model: "claude-opus" };
+    yield* settings.updateSettings({
+      projectSettingsOverrides: {
+        [projectId]: {
+          ...(yield* settings.getSettings).projectSettingsOverrides[projectId],
+          defaultModelSelection: model,
+        },
+      },
+    });
 
     yield* service.update({
       commandId: CommandId.make("command:mcp-scripts:update"),
@@ -714,6 +723,10 @@ it.effect("runs worktree setup scripts saved through project create and update",
       scripts: [script("check", false), script("setup-lock", true)],
     });
     assert.equal(yield* setupScriptId(), "setup-lock");
+    assert.deepEqual(
+      (yield* settings.getSettings).projectSettingsOverrides[projectId]?.defaultModelSelection,
+      model,
+    );
   }).pipe(
     // Every install that has loaded settings once has folded them; only overrides apply.
     Effect.provide(layerTestFor(layerMetadata, { projectSettingsFolded: true })),
