@@ -7,6 +7,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { CommandId, type Project, ProjectId, ProviderInstanceId } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { resolveProjectScripts, setupProjectScript } from "@t3tools/shared/projectScripts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -100,13 +101,14 @@ const layerTestFor = (
     | ProjectFaviconResolver.ProjectFaviconResolver
     | RepositoryIdentityResolver.RepositoryIdentityResolver
   >,
+  settings: Parameters<typeof ServerSettings.layerTest>[0] = {},
 ) =>
   RuntimeLayer.layerProjectService.pipe(
     Layer.provideMerge(ProjectEnrichmentService.layer),
     Layer.provideMerge(layerWorkspacePaths),
     Layer.provideMerge(projectMetadataLayer),
     Layer.provideMerge(SqlitePersistence.layerMemory),
-    Layer.provideMerge(ServerSettings.layerTest()),
+    Layer.provideMerge(ServerSettings.layerTest(settings)),
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "project-service-test-" })),
     Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
     Layer.provideMerge(layerEnrichmentCompletions),
@@ -678,6 +680,45 @@ it.layer(layerTest)("ProjectService", (it) => {
     }),
   );
 });
+
+it.effect("runs worktree setup scripts saved through project create and update", () =>
+  Effect.gen(function* () {
+    const service = yield* ProjectService.ProjectService;
+    const settings = yield* ServerSettings.ServerSettingsService;
+    const projectId = ProjectId.make("project:mcp-scripts");
+    const script = (id: string, runOnWorktreeCreate: boolean) => ({
+      id,
+      name: id,
+      command: `echo ${id}`,
+      icon: "configure" as const,
+      runOnWorktreeCreate,
+    });
+    const setupScriptId = Effect.fn(function* () {
+      const project = Option.getOrThrow(yield* service.getById(projectId));
+      const scripts = resolveProjectScripts(yield* settings.getSettings, project);
+      return setupProjectScript(scripts)?.id ?? null;
+    });
+
+    yield* service.create({
+      commandId: CommandId.make("command:mcp-scripts:create"),
+      projectId,
+      title: "Scripts",
+      workspaceRoot: "/work/mcp-scripts",
+      scripts: [script("check", false), script("install", true)],
+    });
+    assert.equal(yield* setupScriptId(), "install");
+
+    yield* service.update({
+      commandId: CommandId.make("command:mcp-scripts:update"),
+      projectId,
+      scripts: [script("check", false), script("setup-lock", true)],
+    });
+    assert.equal(yield* setupScriptId(), "setup-lock");
+  }).pipe(
+    // Every install that has loaded settings once has folded them; only overrides apply.
+    Effect.provide(layerTestFor(layerMetadata, { projectSettingsFolded: true })),
+  ),
+);
 
 it.effect("keeps project snapshots available when optional metadata enrichment fails", () =>
   Effect.gen(function* () {

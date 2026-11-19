@@ -4,6 +4,7 @@ import {
   ProjectId,
   type Project,
   type ProjectCreatePayload,
+  type ProjectScript,
   type ProjectUpdatePayload,
   type ProjectSnapshot,
   type ThreadId,
@@ -111,6 +112,7 @@ export class ProjectOperationError extends Schema.TaggedError<ProjectOperationEr
       "list-threads",
       "delete-thread",
       "dispatch-project-command",
+      "save-project-scripts",
     ]),
     projectId: Schema.optional(ProjectId),
     workspaceRoot: Schema.optional(Schema.String),
@@ -408,6 +410,19 @@ export const make = Effect.gen(function* () {
     return Option.isNone(row) ? Option.none() : Option.some(yield* hydrate(row.value));
   });
 
+  // Folded settings, not the project record, hold the scripts that runs use (resolveProjectScripts).
+  const saveScripts = (projectId: ProjectId, scripts: ReadonlyArray<ProjectScript>) =>
+    serverSettings
+      .updateSettings({
+        projectSettingsOverrides: { [projectId]: { defaultProjectScripts: scripts } },
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProjectOperationError({ operation: "save-project-scripts", projectId, cause }),
+        ),
+      );
+
   const create: ProjectService["Service"]["create"] = Effect.fn("ProjectService.create")(
     function* (input) {
       yield* rejectWslSharePath(input.projectId, input.workspaceRoot);
@@ -425,6 +440,7 @@ export const make = Effect.gen(function* () {
         workspaceRoot,
         ...(input.scripts === undefined ? {} : { scripts: input.scripts }),
       });
+      if (input.scripts !== undefined) yield* saveScripts(input.projectId, input.scripts);
       yield* projectEnrichment.invalidate([workspaceRoot]);
       return yield* readCommitted(input.projectId);
     },
@@ -469,6 +485,7 @@ export const make = Effect.gen(function* () {
         ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
         ...(input.archived === undefined ? {} : { archived: input.archived }),
       });
+      if (input.scripts !== undefined) yield* saveScripts(input.projectId, input.scripts);
       if (workspaceRoot !== previousRoot || input.faviconPath !== undefined) {
         yield* projectEnrichment.invalidate([previousRoot, workspaceRoot]);
       }
