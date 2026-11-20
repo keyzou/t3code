@@ -57,8 +57,7 @@ const clientLaunchHarness = (input: {
   readonly providers?: readonly ServerProvider[];
   /** Where Settings saves a project's model; the legacy project field stays null. */
   readonly overrideModel?: ModelSelection;
-  /** Where Settings saves a project's scripts once folded; the legacy project field may differ. */
-  readonly overrideScripts?: ReadonlyArray<ProjectScript>;
+  readonly overrideScripts?: readonly ProjectScript[];
   readonly launched: Array<ThreadLaunch.ThreadLaunchInput>;
   readonly workspaceRoot?: string;
   readonly checkWorktreeBase?: ThreadLaunch.ThreadLaunchService["Service"]["checkWorktreeBase"];
@@ -1175,21 +1174,15 @@ it.effect("an agent cannot delete the built-in scratch project, even with force"
   }),
 );
 
-it.effect("reading a project shows the default model and scripts saved in Settings", () =>
+it.effect("reading a project shows the default model and actions saved in Settings", () =>
   Effect.gen(function* () {
     const overrideModel = {
       instanceId: ProviderInstanceId.make("claudeAgent"),
       model: "claude-sonnet",
     };
     const overrideScripts = [
-      {
-        id: "setup",
-        name: "Setup",
-        command: "vp i",
-        icon: "configure" as const,
-        runOnWorktreeCreate: true,
-      },
-    ];
+      { id: "test", name: "Test", command: "pnpm test", icon: "test", runOnWorktreeCreate: false },
+    ] satisfies ProjectScript[];
     const harness = clientLaunchHarness({
       runtimeModeCeiling: "full-access",
       overrideModel,
@@ -1205,7 +1198,15 @@ it.effect("reading a project shows the default model and scripts saved in Settin
             title: "Client target",
             workspaceRoot: "/projects/client-target",
             defaultModelSelection: null,
-            scripts: [],
+            scripts: [
+              {
+                id: "stale",
+                name: "Stale",
+                command: "true",
+                icon: "play",
+                runOnWorktreeCreate: false,
+              },
+            ],
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
             deletedAt: null,
