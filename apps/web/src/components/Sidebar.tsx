@@ -111,6 +111,7 @@ import { configuredHostedAppUrl } from "../hostedPairing";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { SidebarFolderDrop } from "./sidebar/SidebarFolderDrop";
 import {
+  groupIconFallbacks,
   pickableProjectGroups,
   selectProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
@@ -1998,6 +1999,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       }
     })();
   };
+  const attemptPinStable = useStableCallback(attemptPin);
   const attemptUnpin = (threadRef: ScopedThreadRef) => {
     void (async () => {
       const result = await confirmAndUnpinThread(threadRef);
@@ -3223,13 +3225,24 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 : "-ml-1 flex rounded-[25%] bg-sidebar ring-2 ring-sidebar"
                             }
                           >
-                            <ProjectFavicon project={project} className="size-3.5" />
+                            <ProjectFavicon
+                              project={project}
+                              fallbackProjects={groupIconFallbacks(project.memberProjects, project)}
+                              className="size-3.5"
+                            />
                           </span>
                         ))}
                       </span>
                     ) : scopedProjectGroups[0] ? (
                       <span className="flex shrink-0">
-                        <ProjectFavicon project={scopedProjectGroups[0]} className="size-4" />
+                        <ProjectFavicon
+                          project={scopedProjectGroups[0]}
+                          fallbackProjects={groupIconFallbacks(
+                            scopedProjectGroups[0].memberProjects,
+                            scopedProjectGroups[0],
+                          )}
+                          className="size-4"
+                        />
                       </span>
                     ) : (
                       <FolderIcon className="size-4" />
@@ -3326,7 +3339,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               canShiftPick={project !== null}
                             >
                               {project ? (
-                                <ProjectFavicon project={project} className="size-4 shrink-0" />
+                                <ProjectFavicon
+                                  project={project}
+                                  fallbackProjects={groupIconFallbacks(
+                                    project.memberProjects,
+                                    project,
+                                  )}
+                                  className="size-4 shrink-0"
+                                />
                               ) : (
                                 <FolderIcon className="size-4 shrink-0" />
                               )}
@@ -3673,6 +3693,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           onUnsettle={attemptUnsettle}
                           onSnooze={attemptSnooze}
                           onUnsnooze={attemptUnsnooze}
+                          onPin={attemptPinStable}
                           onUnpin={attemptUnpin}
                           onAcknowledgeWoke={acknowledgeWoke}
                           onFileDropThreads={handleThreadFileDrop}
